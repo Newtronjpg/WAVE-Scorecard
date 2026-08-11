@@ -83,6 +83,14 @@ is also the natural home for a Next.js app since Vercel builds Next.js.
   computed scores are stored as their own columns, so admin reads don't
   need to recompute 28-question math, but the raw answers are always
   there if the scoring logic ever needs to be re-applied.
+
+  Pinned to Prisma 6, deliberately. Prisma will nag about a v7 upgrade
+  being available; don't take it. Prisma 7 removes the `url =
+  env("DATABASE_URL")` line this schema uses and requires a separate
+  `prisma.config.ts` plus a driver adapter instead, a real breaking
+  change, not a routine bump. Most current guides (including Vercel's own
+  Prisma docs) still assume the v6 setup this project uses. Worth
+  revisiting once v7's ecosystem and docs catch up, not worth doing today.
 - **`exceljs`** builds the `.xlsx` export server-side, on request, always
   reflecting the latest submissions.
 - **A passcode, not a full login system**, protects `/admin` (checked in
