@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  /* F&W's real brand colors, pulled directly from their logo
+     (fw-cpa.com), not the placeholder green from the old prototype. */
+  --color-maroon: #6d0104;
+  --color-maroon-dark: #4a0103;
+  --color-red: #ae1b1d;
+
+  --color-paper: #fbf7f5;
+  --color-paper-raised: #ffffff;
+  --color-ink: #241b1a;
+  --color-ink-muted: #6b5c59;
+  --color-line: #e7dbd8;
+
+  /* Tier ramp: a single-hue intensity scale built from the brand's own
+     maroon/red rather than a generic red/yellow/green stoplight. Poor is
+     a pale tint of the brand color; Excellent is the full, deep maroon.
+     Keeps the whole product, including "bad news," inside one disciplined
+     palette instead of borrowing an unrelated hue for it. */
+  --color-tier-poor: #eeded9;
+  --color-tier-fair: #d99c92;
+  --color-tier-good: var(--color-red);
+  --color-tier-excellent: var(--color-maroon);
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+}
+
+@theme inline {
+  --color-maroon: var(--color-maroon);
+  --color-maroon-dark: var(--color-maroon-dark);
+  --color-red: var(--color-red);
+  --color-paper: var(--color-paper);
+  --color-paper-raised: var(--color-paper-raised);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-line: var(--color-line);
+  --color-tier-poor: var(--color-tier-poor);
+  --color-tier-fair: var(--color-tier-fair);
+  --color-tier-good: var(--color-tier-good);
+  --color-tier-excellent: var(--color-tier-excellent);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-tier-fair);
+  color: var(--color-ink);
+}
+
+/* Respect reduced-motion preferences: this is a self-assessment tool a
+   business owner fills out thoughtfully, not a product that benefits
+   from persuading anyone via motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible keyboard focus everywhere, styled instead of suppressed. */
+:focus-visible {
+  outline: 2px solid var(--color-red);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

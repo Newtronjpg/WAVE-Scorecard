@@ -1,0 +1,51 @@
+// Prisma schema for the WAVE Scorecard (Gap Map) assessment.
+//
+// One model today: Submission. Each completed assessment is one row.
+// Answers are stored twice, deliberately:
+//   - `answers` (JSON) holds the raw {questionId: rating} map. This is the
+//     source of truth and is what lets us re-score old submissions if the
+//     scoring logic ever changes.
+//   - The four gap scores + overall score are stored as their own columns
+//     too, computed at submission time, so the admin list and the Excel
+//     export are fast (no need to recompute 28-question math on every read).
+//
+// This is intentionally the only table for today's build. The Action
+// Library / Combo Rules layer (see lib/actionLibrary.ts and
+// lib/comboRules.ts) is data-only right now and doesn't write anything to
+// the database yet. When that gets wired up, it plugs in as a
+// RecommendedAction / TriggeredRule table (or a JSON column on Submission)
+// without touching this model.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Submission {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Optional, since the assessment does not require them to start.
+  prospectName String?
+  companyName  String?
+
+  // Raw answers: { "W1": 4, "W2": 2, ... } for all 28 question ids.
+  answers Json
+
+  // Computed at submission time (see lib/scoring.ts). Stored so reads are
+  // cheap and so a submission's displayed score never silently drifts if
+  // the scoring formula changes later; re-scoring is an explicit action,
+  // not an accident.
+  wealthScore     Int
+  accountingScore Int
+  valueScore      Int
+  earningsScore   Int
+  overallScore    Int
+  readinessBand   String
+
+  @@map("submissions")
+}
