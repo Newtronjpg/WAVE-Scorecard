@@ -13,17 +13,19 @@
   --color-ink-muted: #6b5c59;
   --color-line: #e7dbd8;
 
-  /* Tier ramp: a single-hue intensity scale built from the brand's own
-     maroon/red rather than a generic red/yellow/green stoplight. Poor is
-     a pale tint of the brand color; Excellent is the full, deep maroon.
-     Keeps the whole product, including "bad news," inside one disciplined
-     palette instead of borrowing an unrelated hue for it. */
-  --color-tier-poor: #eeded9;
-  --color-tier-fair: #d99c92;
-  --color-tier-good: var(--color-red);
-  --color-tier-excellent: var(--color-maroon);
+  /* Two general-purpose light tints derived from the brand palette, used
+     for badge backgrounds, progress-bar tracks, and the text-selection
+     highlight. These used to be named after the Poor/Fair/Good/Excellent
+     tier system when the rating buttons were color-coded by tier; once
+     that became one flat maroon for "selected" (Noah's call: no color
+     ramp), tier-good and tier-excellent had nothing left referencing
+     them and were removed, and these two were renamed to describe what
+     they actually do now instead of a coloring scheme that no longer
+     exists in the UI. */
+  --color-tint: #eeded9;
+  --color-selection: #d99c92;
 
-  --font-display: var(--font-fraunces);
+  --font-display: var(--font-eb-garamond);
   --font-sans: var(--font-inter);
 }
 
@@ -36,10 +38,8 @@
   --color-ink: var(--color-ink);
   --color-ink-muted: var(--color-ink-muted);
   --color-line: var(--color-line);
-  --color-tier-poor: var(--color-tier-poor);
-  --color-tier-fair: var(--color-tier-fair);
-  --color-tier-good: var(--color-tier-good);
-  --color-tier-excellent: var(--color-tier-excellent);
+  --color-tint: var(--color-tint);
+  --color-selection: var(--color-selection);
   --font-display: var(--font-display);
   --font-sans: var(--font-sans);
 }
@@ -55,7 +55,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-tier-fair);
+  background: var(--color-selection);
   color: var(--color-ink);
 }
 

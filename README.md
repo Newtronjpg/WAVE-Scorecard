@@ -1,4 +1,4 @@
-# WAVE Scorecard (The Gap Map)
+# WAVE Scorecard
 
 Faulk & Winkler's transaction-readiness assessment. A prospect answers 28
 statements across four gaps (Wealth, Accounting, Value, Earnings), each
@@ -18,7 +18,7 @@ You need Node 20+ and a Postgres database.
 
 ```bash
 npm install
-cp .env.example .env      # then fill in DATABASE_URL and ADMIN_PASSCODE
+cp .env.example .env      # then fill in DATABASE_URL and ADMIN_USERS
 npx prisma db push        # creates the `submissions` table
 npm run dev                # http://localhost:3000
 ```
@@ -51,19 +51,27 @@ after that, every `git push` auto-deploys.
    "Storage" tab, click "Create Database" -> Postgres (this provisions a
    free Neon-backed Postgres instance and wires `DATABASE_URL` into your
    project's environment variables automatically, no separate signup).
-5. **Add the admin passcode.** Project Settings -> Environment Variables
-   -> add `ADMIN_PASSCODE` with whatever passcode you want to share with
-   Ben. Pick something real, not the `fw-dev-2026` placeholder in
-   `.env.example`.
-6. **Push the schema to the new database.** With `DATABASE_URL` from
+5. **Add your staff's admin logins.** Project Settings -> Environment
+   Variables -> add `ADMIN_USERS` as comma-separated `Name:passcode`
+   pairs, one per person who needs to review submissions, e.g.
+   `Ben:fw-ben-2026,Sarah:fw-sarah-8841`. Add or remove people later by
+   editing this one variable and redeploying, no code changes.
+6. **Optional: email notifications.** Sign up free at resend.com, create
+   an API key, and add `RESEND_API_KEY` and `NOTIFY_EMAIL` (the address
+   that should get notified) as environment variables too. Until F&W's
+   domain is verified in Resend, `NOTIFY_EMAIL` has to be the exact
+   address the Resend account was created with, a Resend restriction, not
+   this app's. Leave both blank to skip notifications; nothing else
+   breaks.
+7. **Push the schema to the new database.** With `DATABASE_URL` from
    Vercel's dashboard copied into a local `.env`, run
    `npx prisma db push` once from your machine to create the
    `submissions` table in the real database. (Or run it from Vercel's
    own shell if you'd rather not have the production URL locally.)
-7. **Deploy.** Vercel deploys automatically on import, and on every
+8. **Deploy.** Vercel deploys automatically on import, and on every
    `git push` to `main` after that. You'll get a URL like
    `wave-scorecard-<random>.vercel.app`, that's the link to text Ben.
-8. **Custom domain, whenever you're ready.** Project Settings -> Domains
+9. **Custom domain, whenever you're ready.** Project Settings -> Domains
    -> add something like `wave.fw-cpa.com`. Vercel gives you the DNS
    record to add; no code or redeploy needed once F&W's DNS is updated.
 
@@ -151,10 +159,26 @@ to drive a laptop over to demo a localhost.
 
 ## Admin access
 
-Visit `/admin`. It'll ask for the passcode set in `ADMIN_PASSCODE`. From
-there: a table of every submission's scores, and a "Download Excel"
-button that generates a `.xlsx` with every raw 1-5 answer as its own
-column, not just the computed scores.
+Visit `/admin`. It'll ask for a passcode, checked against `ADMIN_USERS`
+(see `.env.example`), a comma-separated list of `Name:passcode` pairs so
+each staff member has their own, and the page shows who's currently
+logged in. From there: a table of every submission's scores, and a
+"Download Excel" button that generates a `.xlsx` with every raw 1-5
+answer as its own column, not just the computed scores.
+
+This is deliberately not full SSO, there's no central identity provider,
+no per-action audit log beyond "who's currently logged in". It's a real
+step up from one shared secret, and it's what's buildable without
+coordinating an Azure AD app registration first. Real Microsoft Entra ID
+login (matching F&W's likely existing Microsoft 365 setup) is the natural
+next upgrade whenever that coordination happens with F&W's IT.
+
+## Email notifications
+
+Set `RESEND_API_KEY` and `NOTIFY_EMAIL` (see `.env.example`) to get an
+email whenever someone finishes the assessment, name, company, overall
+score, and a link straight to `/admin`. Leave both unset to skip this
+entirely; the assessment and admin review both work fine without it.
 
 ## Project structure
 
@@ -170,8 +194,9 @@ lib/
   actionLibrary.ts         dormant: per-question recommended actions
   comboRules.ts             dormant: cross-question rules
   excel.ts                  builds the .xlsx export
+  email.ts                   optional submission-notification emails via Resend
   db.ts                      Prisma client
-  adminAuth.ts               passcode check (constant-time, Edge-runtime safe)
+  adminAuth.ts               multi-user passcode check (constant-time, Edge-runtime safe)
 components/
   Assessment.tsx           the whole intro -> questions -> results flow
   RatingSelector.tsx        the signature 1-5 + live-meaning interaction

@@ -9,9 +9,9 @@ import { ADMIN_COOKIE_NAME, isValidPasscode } from "@/lib/adminAuth";
 // submission's name/company/answers, so it gets a passcode gate.
 //
 // The cookie's value is never trusted on its own; it just carries the
-// passcode, which is re-checked with the same timing-safe comparison on
+// passcode, which is re-checked against the current ADMIN_USERS list on
 // every request. That trades a slightly heavier check for not needing a
-// session store for what is, today, a single shared passcode.
+// session store.
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

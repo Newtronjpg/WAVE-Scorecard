@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { GAPS, questionsByGap, QUESTIONS, type Gap } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
+import { IntroView } from "./IntroView";
 
 type ScoreResultShape = {
   overallScore: number;
@@ -58,8 +59,8 @@ export function Assessment() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           answers,
-          prospectName: prospectName.trim() || undefined,
-          companyName: companyName.trim() || undefined,
+          prospectName: prospectName.trim(),
+          companyName: companyName.trim(),
         }),
       });
       if (!res.ok) {
@@ -109,84 +110,13 @@ export function Assessment() {
   // ---------------------------------------------------------------- INTRO
   if (view === "intro") {
     return (
-      <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
-        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
-          Faulk &amp; Winkler &middot; Advisory Services
-        </p>
-        <h1 className="font-display text-4xl sm:text-5xl text-ink mt-3 leading-[1.1]">
-          The Gap Map <span className="italic text-ink-muted font-normal">or</span> WAVE
-          Scorecard
-        </h1>
-        <p className="font-display italic text-xl text-ink-muted mt-4">
-          Know where you stand.
-        </p>
-        <p className="mt-6 text-ink leading-relaxed">
-          Whether you plan to sell, bring on a partner, or hand the business to the
-          next generation, the owners who come out ahead start years early. This
-          assessment measures the distance between where your business is today and
-          where it needs to be, across the four gaps that decide what you walk away
-          with.
-        </p>
-
-        <div className="mt-8 divide-y divide-line border-y border-line">
-          {GAPS.map((g) => (
-            <div key={g.id} className="py-3.5 flex gap-4">
-              <span className="font-display text-base text-maroon w-36 shrink-0">
-                {g.name}
-              </span>
-              <span className="text-sm text-ink-muted">{g.description}</span>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-6 text-sm text-ink-muted leading-relaxed">
-          28 quick statements, rated 1 to 5, each with its own scale so every number
-          means something specific to that question. Takes about five minutes. Your
-          answers are saved so your F&amp;W advisor can review them with you; they
-          are not shared outside Faulk &amp; Winkler.
-        </p>
-
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-ink-muted" htmlFor="prospectName">
-              Name <span className="italic">(optional)</span>
-            </label>
-            <input
-              id="prospectName"
-              type="text"
-              value={prospectName}
-              onChange={(e) => setProspectName(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line bg-paper-raised px-3 py-2 text-sm text-ink focus:outline-none"
-              placeholder="Jane Owner"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-ink-muted" htmlFor="companyName">
-              Company <span className="italic">(optional)</span>
-            </label>
-            <input
-              id="companyName"
-              type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line bg-paper-raised px-3 py-2 text-sm text-ink focus:outline-none"
-              placeholder="Acme Fabrication, Inc."
-            />
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setView("section")}
-          className="mt-8 w-full sm:w-auto inline-flex items-center justify-center rounded-md bg-maroon px-6 py-3 text-white font-medium hover:bg-[var(--color-maroon-dark)] transition-colors cursor-pointer"
-        >
-          Start the assessment
-        </button>
-
-        <p className="mt-10 text-xs text-ink-muted">
-          A Faulk &amp; Winkler Advisory diagnostic.
-        </p>
-      </div>
+      <IntroView
+        prospectName={prospectName}
+        companyName={companyName}
+        onProspectNameChange={setProspectName}
+        onCompanyNameChange={setCompanyName}
+        onStart={() => setView("section")}
+      />
     );
   }
 
@@ -206,7 +136,7 @@ export function Assessment() {
             {result.overallScore}
             <span className="text-2xl text-ink-muted">/100</span>
           </span>
-          <span className="inline-block rounded-full bg-[var(--color-tier-poor)] px-3 py-1 text-xs font-medium text-ink">
+          <span className="inline-block rounded-full bg-[var(--color-tint)] px-3 py-1 text-xs font-medium text-ink">
             {result.band.label}
           </span>
         </div>
@@ -252,16 +182,13 @@ export function Assessment() {
   // ------------------------------------------------------- SECTION / SUBMIT
   return (
     <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
-      <div className="flex items-center justify-between">
-        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
-          Section {sectionIndex + 1} of {GAPS.length}
-        </p>
-        <p className="text-xs text-ink-muted">{totalAnswered} of 28 answered</p>
-      </div>
+      <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
+        Section {sectionIndex + 1} of {GAPS.length}
+      </p>
       <h2 className="font-display text-3xl text-ink mt-2">{currentGap.name}</h2>
       <p className="text-ink-muted italic mt-1">{currentGap.tagline}</p>
 
-      <div className="mt-2 h-1 w-full rounded-full bg-[var(--color-tier-poor)] overflow-hidden">
+      <div className="mt-4 h-1 w-full rounded-full bg-[var(--color-tint)] overflow-hidden">
         <div
           className="h-full bg-maroon transition-[width] duration-300"
           style={{ width: `${(totalAnswered / QUESTIONS.length) * 100}%` }}
@@ -269,19 +196,20 @@ export function Assessment() {
       </div>
 
       {error && (
-        <div className="mt-6 rounded-md border border-red bg-[var(--color-tier-poor)] px-4 py-3 text-sm text-ink">
+        <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
           {error}
         </div>
       )}
 
-      <div className="mt-8 space-y-9">
+      <div className="mt-8 divide-y divide-line">
         {currentQuestions.map((q) => (
-          <RatingSelector
-            key={q.id}
-            question={q}
-            value={answers[q.id]}
-            onChange={(value) => setAnswer(q.id, value)}
-          />
+          <div key={q.id} className="py-8 sm:py-9 first:pt-0">
+            <RatingSelector
+              question={q}
+              value={answers[q.id]}
+              onChange={(value) => setAnswer(q.id, value)}
+            />
+          </div>
         ))}
       </div>
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
 import { QUESTIONS } from "@/lib/questions";
+import { sendSubmissionNotification } from "@/lib/email";
 
 // Every question id must be present with an integer rating 1-5. Building
 // the schema from QUESTIONS (rather than hand-listing 28 keys) means
@@ -14,8 +15,11 @@ const answersShape = Object.fromEntries(
 
 const submitSchema = z.object({
   answers: z.object(answersShape).strict(),
-  prospectName: z.string().trim().min(1).max(200).optional(),
-  companyName: z.string().trim().min(1).max(200).optional(),
+  // Required, not optional: the intro form now requires both before the
+  // assessment can start, so the API enforces the same rule server-side
+  // rather than trusting the client not to skip it.
+  prospectName: z.string().trim().min(1, "Name is required.").max(200),
+  companyName: z.string().trim().min(1, "Company is required.").max(200),
 });
 
 export async function POST(req: NextRequest) {
@@ -76,5 +80,30 @@ export async function POST(req: NextRequest) {
     console.error("Failed to persist submission:", e);
   }
 
-  return NextResponse.json(result);
+  // Awaited on purpose: a serverless function can be frozen or torn down
+  // the moment the response is sent, so an un-awaited "fire and forget"
+  // email risks never actually going out. sendSubmissionNotification
+  // itself never throws (see lib/email.ts), so this can't fail the
+  // response, it can only add a little latency while it sends.
+  const notification = await sendSubmissionNotification({
+    prospectName,
+    companyName,
+    result,
+    adminUrl: new URL("/admin", req.nextUrl.origin).toString(),
+  });
+  if (!notification.sent) {
+    console.log("Submission notification not sent:", notification.reason);
+  }
+
+  // _notification only appears outside production (NODE_ENV is set
+  // automatically by `next dev`/`next start`, nothing to configure). It
+  // exists so the email outcome shows up directly in whatever terminal
+  // is testing /api/submit, curl's own stdout included, instead of
+  // needing to go find it in a separate server log window. On the real
+  // deploy this field never appears at all, so it can't leak Resend
+  // error text or delivery status to an actual client.
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(result);
+  }
+  return NextResponse.json({ ...result, _notification: notification });
 }

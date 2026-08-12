@@ -1,9 +1,19 @@
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ADMIN_COOKIE_NAME, matchAdminUser } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
+  const cookieStore = await cookies();
+  const passcode = cookieStore.get(ADMIN_COOKIE_NAME)?.value ?? "";
+  // proxy.ts already guarantees this request has a valid passcode before
+  // the page ever renders; re-resolving it here isn't re-checking access,
+  // it's just recovering WHICH staff member that passcode belongs to, so
+  // the page can say who's logged in.
+  const user = matchAdminUser(passcode);
+
   const submissions = await db.submission.findMany({
     orderBy: { createdAt: "desc" },
   });
@@ -27,7 +37,14 @@ export default async function AdminPage() {
             WAVE Scorecard submissions
           </h1>
         </div>
-        <LogoutButton />
+        <div className="text-right shrink-0">
+          {user && (
+            <p className="text-sm text-ink-muted">
+              Logged in as <span className="font-medium text-ink">{user.name}</span>
+            </p>
+          )}
+          <LogoutButton />
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-6 text-sm">
@@ -39,7 +56,7 @@ export default async function AdminPage() {
         </div>
         <div>
           <span className="block font-display text-2xl text-maroon">
-            {average ?? "\u2014"}
+            {average ?? "-"}
           </span>
           <span className="text-ink-muted">Average score</span>
         </div>
@@ -55,7 +72,7 @@ export default async function AdminPage() {
       <div className="mt-8 overflow-x-auto rounded-md border border-line">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-[var(--color-tier-poor)] text-left">
+            <tr className="bg-[var(--color-tint)] text-left">
               <th className="px-3 py-2 font-medium">Submitted</th>
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Company</th>
@@ -73,8 +90,8 @@ export default async function AdminPage() {
                 <td className="px-3 py-2 whitespace-nowrap text-ink-muted">
                   {s.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                 </td>
-                <td className="px-3 py-2">{s.prospectName ?? "\u2014"}</td>
-                <td className="px-3 py-2">{s.companyName ?? "\u2014"}</td>
+                <td className="px-3 py-2">{s.prospectName ?? "-"}</td>
+                <td className="px-3 py-2">{s.companyName ?? "-"}</td>
                 <td className="px-3 py-2 text-right">{s.wealthScore}</td>
                 <td className="px-3 py-2 text-right">{s.accountingScore}</td>
                 <td className="px-3 py-2 text-right">{s.valueScore}</td>

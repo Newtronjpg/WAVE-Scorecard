@@ -3,20 +3,6 @@
 import { useState } from "react";
 import type { Question } from "@/lib/questions";
 
-const TIER_BG: Record<string, string> = {
-  Poor: "bg-[var(--color-tier-poor)]",
-  Fair: "bg-[var(--color-tier-fair)]",
-  Good: "bg-[var(--color-tier-good)]",
-  Excellent: "bg-[var(--color-tier-excellent)]",
-};
-
-const TIER_TEXT: Record<string, string> = {
-  Poor: "text-ink",
-  Fair: "text-white",
-  Good: "text-white",
-  Excellent: "text-white",
-};
-
 export function RatingSelector({
   question,
   value,
@@ -26,12 +12,16 @@ export function RatingSelector({
   value: number | undefined;
   onChange: (value: number) => void;
 }) {
-  // Tracks whichever number is currently being previewed (tap/hover/focus)
-  // so the caption can show a level's meaning before it's committed, not
-  // only after. Falls back to the committed value once preview ends.
+  // Tracks whichever number is being hovered/focused, used ONLY to preview
+  // a level's meaning before anything is picked. Once a value is committed,
+  // `shown` locks to it and ignores further hover/focus, so the caption
+  // below stops changing as the mouse moves around after an answer is
+  // chosen. Comparing options before choosing still works exactly as
+  // before, it just stops once you've actually answered.
   const [preview, setPreview] = useState<number | undefined>(undefined);
-  const shown = preview ?? value;
+  const shown = value ?? preview;
   const shownLevel = question.levels.find((l) => l.value === shown);
+  const answered = value !== undefined;
 
   return (
     <fieldset className="border-0 p-0 m-0">
@@ -42,7 +32,7 @@ export function RatingSelector({
       <div
         role="radiogroup"
         aria-label={question.statement}
-        className="grid grid-cols-5 gap-1.5 sm:gap-2"
+        className="grid grid-cols-5 gap-2"
       >
         {question.levels.map((level) => {
           const selected = value === level.value;
@@ -59,23 +49,17 @@ export function RatingSelector({
               onFocus={() => setPreview(level.value)}
               onBlur={() => setPreview(undefined)}
               className={[
-                "group flex flex-col items-center justify-start gap-1 rounded-lg border-2 px-1 py-2.5 sm:py-3",
+                "flex items-center justify-center rounded-lg border-2 py-3",
                 "transition-colors duration-150 cursor-pointer",
+                // One color for "selected," always, regardless of which
+                // number it is. No per-tier color ramp.
                 selected
-                  ? `${TIER_BG[level.tier]} ${TIER_TEXT[level.tier]} border-transparent`
+                  ? "bg-maroon text-white border-transparent"
                   : "bg-paper-raised border-line text-ink hover:border-red",
               ].join(" ")}
             >
-              <span className="font-display text-lg sm:text-xl font-medium">
+              <span className="font-display text-xl sm:text-2xl font-medium">
                 {level.value}
-              </span>
-              <span
-                className={[
-                  "hidden sm:block text-[11px] leading-tight text-center line-clamp-2",
-                  selected ? "opacity-90" : "text-ink-muted",
-                ].join(" ")}
-              >
-                {level.label}
               </span>
             </button>
           );
@@ -84,13 +68,14 @@ export function RatingSelector({
 
       <div
         aria-live="polite"
-        className="mt-3 min-h-[3rem] rounded-md border border-line bg-paper-raised px-3 py-2.5 text-sm text-ink-muted"
+        className={[
+          "mt-3 min-h-[2.75rem] border-l-2 pl-3 py-1 text-sm text-ink-muted",
+          answered ? "border-maroon" : "border-line",
+        ].join(" ")}
       >
         {shownLevel ? (
           <span>
-            <span className="font-medium text-ink">
-              {shownLevel.value} &middot; {shownLevel.tier}.{" "}
-            </span>
+            <span className="font-medium text-ink">{shownLevel.value}. </span>
             {shownLevel.description}
           </span>
         ) : (
