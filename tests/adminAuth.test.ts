@@ -63,6 +63,21 @@ describe("matchAdminUser", () => {
     expect(matchAdminUser("pass-priya-6630")).toEqual({ name: "Priya" });
   });
 
+  it("accepts a single bare passcode with no colon (defaults the name)", async () => {
+    // The exact mistake that's easy to make: setting ADMIN_USERS to a
+    // plain string instead of "Name:passcode". It should just work as a
+    // single admin passcode.
+    process.env.ADMIN_USERS = "Admin-wave-2020";
+    const { matchAdminUser } = await freshAdminAuth();
+    expect(matchAdminUser("Admin-wave-2020")).toEqual({ name: "Admin" });
+  });
+
+  it("accepts a bare passcode even when wrapped in quotes", async () => {
+    process.env.ADMIN_USERS = '"wave-2020"';
+    const { matchAdminUser } = await freshAdminAuth();
+    expect(matchAdminUser("wave-2020")).toEqual({ name: "Admin" });
+  });
+
   it("tolerates the whole value being wrapped in quotes (a common dashboard paste)", async () => {
     // Pasting `"Alex:pass-alex-2026"` verbatim from an .env example into a
     // hosting dashboard stores the quotes literally. The clean passcode

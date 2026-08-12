@@ -58,7 +58,22 @@ function clean(value: string): string {
 }
 
 function getAdminUsers(): { name: string; passcode: string }[] {
-  const raw = process.env.ADMIN_USERS ?? "";
+  const raw = (process.env.ADMIN_USERS ?? "").trim();
+  if (!raw) return [];
+
+  // Convenience for the common "ADMIN_USERS is just my password" mental
+  // model: if the entire value contains no colon at all, treat it as a
+  // single bare passcode and give it a default name. This rescues the
+  // easy mistake of setting ADMIN_USERS to a plain string like
+  // "wave-2020" (or "Admin-wave-2020") instead of "Name:passcode".
+  // A value that DOES contain a colon anywhere still uses strict
+  // comma-separated Name:passcode parsing below, so a stray token in a
+  // real list is skipped rather than becoming an accidental credential.
+  if (!raw.includes(":")) {
+    const passcode = clean(raw);
+    return passcode ? [{ name: "Admin", passcode }] : [];
+  }
+
   return raw
     .split(",")
     .map((entry) => entry.trim())
