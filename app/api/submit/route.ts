@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
 import { QUESTIONS } from "@/lib/questions";
 import { getNotifyRecipients } from "@/lib/settings";
+import { checkRateLimit, clientIdentifier } from "@/lib/rateLimit";
 import {
   resolveAdminUrl,
   sendPersistenceFailureAlert,
@@ -28,6 +29,23 @@ const submitSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Throttle before doing any work. This endpoint is public and every
+  // accepted call writes a row and sends an email, so it is the one place
+  // an unauthenticated visitor can cost us real resources.
+  const limit = await checkRateLimit(clientIdentifier(req.headers));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Too many submissions from this connection. Please try again later.",
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      }
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();

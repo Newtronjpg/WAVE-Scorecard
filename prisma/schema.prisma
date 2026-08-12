@@ -77,3 +77,14 @@ model QuestionOverride {
 
   @@map("question_overrides")
 }
+
+// Fixed-window throttle counters for the public submit endpoint. One row
+// per hashed client identifier; see lib/rateLimit.ts. Rows are disposable
+// and can be truncated at any time.
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+
+  @@map("rate_limits")
+}

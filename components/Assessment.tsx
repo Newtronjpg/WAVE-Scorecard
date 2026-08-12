@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GAPS, type Gap, type Question } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
@@ -40,6 +40,17 @@ export function Assessment({ questions }: { questions: Question[] }) {
   const [companyName, setCompanyName] = useState("");
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Scroll to the top whenever the step changes.
+  //
+  // This runs in an effect, not inside the click handler, because a
+  // handler fires in the same tick as the state update: the scroll would
+  // start against the OLD section and then be cut off when React swapped
+  // the content in. "auto" rather than "smooth" for the same reason, and
+  // because animating up from the bottom of a long section reads as lag.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [view, sectionIndex]);
 
   const currentGap = GAPS[sectionIndex];
   const currentQuestions = useMemo(
@@ -89,7 +100,6 @@ export function Assessment({ questions }: { questions: Question[] }) {
   function handleNext() {
     if (sectionIndex < GAPS.length - 1) {
       setSectionIndex((i) => i + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       handleFinish();
     }
@@ -101,7 +111,6 @@ export function Assessment({ questions }: { questions: Question[] }) {
     } else {
       setSectionIndex((i) => i - 1);
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleStartOver() {
@@ -110,7 +119,6 @@ export function Assessment({ questions }: { questions: Question[] }) {
     setResult(null);
     setError(null);
     setView("intro");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   // ---------------------------------------------------------------- INTRO

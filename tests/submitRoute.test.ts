@@ -17,7 +17,17 @@ const alertMock = vi.fn();
 const notifyMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
-  db: { submission: { create: (...args: unknown[]) => createMock(...args) } },
+  db: {
+    submission: { create: (...args: unknown[]) => createMock(...args) },
+    // Present so the throttle takes its normal allow path rather than
+    // failing open through its error handler, which would make these
+    // tests pass for the wrong reason.
+    rateLimit: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+    setting: { findUnique: vi.fn().mockResolvedValue(null) },
+  },
 }));
 
 vi.mock("@/lib/email", async (importOriginal) => {
