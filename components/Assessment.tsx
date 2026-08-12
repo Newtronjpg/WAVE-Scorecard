@@ -11,6 +11,9 @@ type ScoreResultShape = {
   band: { label: string; description: string };
   gaps: { gap: Gap; name: string; score: number; gapToClose: number }[];
   widestGap: { gap: Gap; name: string; score: number };
+  // False when the score was computed but could not be written to the
+  // database. Optional so an older cached client bundle still renders.
+  saved?: boolean;
 };
 
 type View = "intro" | "section" | "submitting" | "results";
@@ -130,6 +133,26 @@ export function Assessment() {
         <h1 className="font-display text-3xl sm:text-4xl text-ink mt-2">
           Transaction readiness
         </h1>
+
+        {result.saved === false && (
+          // The scores below are real and correct, but this submission was
+          // never recorded. Saying so is the whole point: previously this
+          // looked identical to a successful save, so neither the prospect
+          // nor the firm knew anything had been lost.
+          <div
+            role="alert"
+            className="mt-6 rounded-md border border-maroon bg-[var(--color-tint)] px-4 py-3"
+          >
+            <p className="text-sm font-medium text-ink">
+              Your results weren&rsquo;t saved.
+            </p>
+            <p className="mt-1 text-sm text-ink-muted leading-relaxed">
+              Your scores below are correct, but we couldn&rsquo;t record them.
+              Please print or screenshot this page and send it to us so nothing
+              is lost. We&rsquo;ve been notified.
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap items-baseline gap-4">
           <span className="font-display text-6xl text-maroon leading-none">

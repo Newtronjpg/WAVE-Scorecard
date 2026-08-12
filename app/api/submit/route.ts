@@ -3,7 +3,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
 import { QUESTIONS } from "@/lib/questions";
-import { resolveAdminUrl, sendSubmissionNotification } from "@/lib/email";
+import {
+  resolveAdminUrl,
+  sendPersistenceFailureAlert,
+  sendSubmissionNotification,
+} from "@/lib/email";
 
 // Every question id must be present with an integer rating 1-5. Building
 // the schema from QUESTIONS (rather than hand-listing 28 keys) means
@@ -58,6 +62,13 @@ export async function POST(req: NextRequest) {
   const value = result.gaps.find((g) => g.gap === "value")!;
   const earnings = result.gaps.find((g) => g.gap === "earnings")!;
 
+  const adminUrl = resolveAdminUrl(req.nextUrl.origin);
+  let saved = true;
+  let notification: { sent: boolean; reason?: string } = {
+    sent: false,
+    reason: "not attempted",
+  };
+
   try {
     await db.submission.create({
       data: {
@@ -74,25 +85,55 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     // The person taking the assessment should still see their results
-    // even if the save fails; we log server-side so it's not silent, but
-    // we don't want a DB hiccup to block someone from seeing a score
-    // they just spent five minutes earning.
+    // even if the save fails; a DB hiccup must not block someone from
+    // seeing a score they just spent five minutes earning.
+    //
+    // But a swallowed failure here once lost every hosted submission for
+    // a day, because the response was indistinguishable from a success
+    // and nobody was told. So the failure now travels two ways: `saved`
+    // goes back to the client, and an alert goes to staff carrying the
+    // raw answers, since this response is the only place that data still
+    // exists.
+    saved = false;
     console.error("Failed to persist submission:", e);
+
+    try {
+      await sendPersistenceFailureAlert({
+        prospectName,
+        companyName,
+        answers,
+        result,
+        adminUrl,
+        error: e,
+      });
+    } catch (alertError) {
+      // sendPersistenceFailureAlert is written not to throw, so reaching
+      // here means something unforeseen. Never let it mask the original
+      // data loss or break the response.
+      console.error("Failed to raise persistence failure alert:", alertError);
+    }
   }
 
+  // Only for submissions that actually landed. Sending the routine "new
+  // submission" email after a failed write would tell staff a submission
+  // is waiting in the admin table when it is not there at all; the
+  // failure alert above is what gets sent instead.
+  //
   // Awaited on purpose: a serverless function can be frozen or torn down
   // the moment the response is sent, so an un-awaited "fire and forget"
   // email risks never actually going out. sendSubmissionNotification
   // itself never throws (see lib/email.ts), so this can't fail the
   // response, it can only add a little latency while it sends.
-  const notification = await sendSubmissionNotification({
-    prospectName,
-    companyName,
-    result,
-    adminUrl: resolveAdminUrl(req.nextUrl.origin),
-  });
-  if (!notification.sent) {
-    console.log("Submission notification not sent:", notification.reason);
+  if (saved) {
+    notification = await sendSubmissionNotification({
+      prospectName,
+      companyName,
+      result,
+      adminUrl,
+    });
+    if (!notification.sent) {
+      console.log("Submission notification not sent:", notification.reason);
+    }
   }
 
   // _notification only appears outside production (NODE_ENV is set
@@ -102,8 +143,11 @@ export async function POST(req: NextRequest) {
   // needing to go find it in a separate server log window. On the real
   // deploy this field never appears at all, so it can't leak mail
   // error text or delivery status to an actual client.
+  // `saved` ships in production too, unlike _notification. The client
+  // needs it to tell the person their results were not recorded; without
+  // it a lost submission looks exactly like a successful one.
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, saved });
   }
-  return NextResponse.json({ ...result, _notification: notification });
+  return NextResponse.json({ ...result, saved, _notification: notification });
 }
