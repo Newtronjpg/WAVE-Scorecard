@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
 import { QUESTIONS } from "@/lib/questions";
+import { getNotifyRecipients } from "@/lib/settings";
 import {
   resolveAdminUrl,
   sendPersistenceFailureAlert,
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
   const earnings = result.gaps.find((g) => g.gap === "earnings")!;
 
   const adminUrl = resolveAdminUrl(req.nextUrl.origin);
+  // Resolved once, before the write, so the failure alert can still reach
+  // someone when the write is what failed. getNotifyRecipients falls back
+  // to NOTIFY_EMAIL if the settings read itself fails.
+  const recipients = await getNotifyRecipients();
   let saved = true;
   let notification: { sent: boolean; reason?: string } = {
     sent: false,
@@ -101,6 +106,7 @@ export async function POST(req: NextRequest) {
       await sendPersistenceFailureAlert({
         prospectName,
         companyName,
+        recipients,
         answers,
         result,
         adminUrl,
@@ -130,6 +136,7 @@ export async function POST(req: NextRequest) {
       companyName,
       result,
       adminUrl,
+      recipients,
     });
     if (!notification.sent) {
       console.log("Submission notification not sent:", notification.reason);

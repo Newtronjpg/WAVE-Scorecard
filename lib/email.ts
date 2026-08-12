@@ -81,15 +81,29 @@ export interface NotificationDetails {
   companyName: string;
   result: ScoreResult;
   adminUrl: string;
+  // Resolved by the caller from the admin-editable setting. Absent means
+  // fall back to the NOTIFY_EMAIL environment variable.
+  recipients?: string[];
 }
 
 // Reads the Gmail configuration, or null when it isn't set up. Shared by
 // both senders so "configured" means exactly the same thing for a normal
 // notification and for a failure alert.
-function mailConfig(): { user: string; pass: string; recipients: string[] } | null {
+//
+// Recipients are passed in by the caller rather than read from the
+// environment here, because they now live in an admin-editable database
+// setting. Keeping the database out of this module leaves it
+// independently testable and usable from anywhere.
+//
+// An explicitly passed EMPTY list means "notifications are off" and must
+// not fall through to NOTIFY_EMAIL; only an absent argument falls back.
+export function resolveMailConfig(
+  recipientsOverride?: string[]
+): { user: string; pass: string; recipients: string[] } | null {
   const user = process.env.GMAIL_USER?.trim();
   const pass = process.env.GMAIL_APP_PASSWORD;
-  const recipients = parseRecipients(process.env.NOTIFY_EMAIL);
+  const recipients =
+    recipientsOverride ?? parseRecipients(process.env.NOTIFY_EMAIL);
   if (!user || !pass || recipients.length === 0) return null;
   return { user, pass, recipients };
 }
@@ -121,40 +135,25 @@ async function deliver(
 export async function sendSubmissionNotification(
   details: NotificationDetails
 ): Promise<{ sent: boolean; reason?: string }> {
-  const user = process.env.GMAIL_USER?.trim();
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  const recipients = parseRecipients(process.env.NOTIFY_EMAIL);
+  const config = resolveMailConfig(details.recipients);
 
-  if (!user || !pass || recipients.length === 0) {
+  if (!config) {
     // Not configured. This is a normal, expected state (e.g. local dev,
     // or before Gmail credentials have been set), not an error.
     return { sent: false, reason: "not configured" };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user, pass },
-    });
-
-    // A friendly From name is optional; the address must be the
-    // authenticated Gmail account (or an alias Gmail is configured to
-    // "send mail as"), so it's always derived from GMAIL_USER.
-    const from = `WAVE Scorecard <${user}>`;
     const { prospectName, companyName, result } = details;
 
     const gapLines = result.gaps
       .map((g) => `${g.name}: ${g.score}/100`)
       .join("\n");
 
-    await withTimeout(
-      transporter.sendMail({
-        from,
-        to: recipients,
-        subject: `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
-        text: `${prospectName} at ${companyName} just finished the WAVE Scorecard.
+    await deliver(
+      config,
+      `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
+      `${prospectName} at ${companyName} just finished the WAVE Scorecard.
 
 Overall: ${result.overallScore}/100 (${result.band.label})
 
@@ -162,10 +161,7 @@ ${gapLines}
 
 Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
 
-Full submission and export: ${details.adminUrl}`,
-      }),
-      TIMEOUT_MS,
-      "Gmail send"
+Full submission and export: ${details.adminUrl}`
     );
 
     return { sent: true };
@@ -178,6 +174,7 @@ Full submission and export: ${details.adminUrl}`,
 export interface PersistenceFailureDetails {
   prospectName: string;
   companyName: string;
+  recipients?: string[];
   answers: Record<string, number>;
   result: ScoreResult;
   adminUrl: string;
@@ -244,7 +241,7 @@ Admin: ${adminUrl}`,
 export async function sendPersistenceFailureAlert(
   details: PersistenceFailureDetails
 ): Promise<{ sent: boolean; reason?: string }> {
-  const config = mailConfig();
+  const config = resolveMailConfig(details.recipients);
   const { subject, text } = buildPersistenceFailureAlert(details);
 
   if (!config) {

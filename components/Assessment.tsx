@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GAPS, questionsByGap, QUESTIONS, type Gap } from "@/lib/questions";
+import { GAPS, type Gap, type Question } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
 import { IntroView } from "./IntroView";
@@ -29,7 +29,10 @@ const WIDEST_GAP_ADVICE: Record<Gap, string> = {
     "get a real read on how your margins compare to your industry, and start tracking the handful of numbers that actually explain the gap. It's hard to fix what hasn't been measured.",
 };
 
-export function Assessment() {
+// Questions arrive as a prop, resolved server-side, so admin wording
+// edits show up here without a redeploy. Structure still comes from
+// lib/questions.ts; only the text can differ from the defaults.
+export function Assessment({ questions }: { questions: Question[] }) {
   const [view, setView] = useState<View>("intro");
   const [sectionIndex, setSectionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -40,14 +43,14 @@ export function Assessment() {
 
   const currentGap = GAPS[sectionIndex];
   const currentQuestions = useMemo(
-    () => questionsByGap(currentGap.id),
-    [currentGap.id]
+    () => questions.filter((q) => q.gap === currentGap.id),
+    [questions, currentGap.id]
   );
   const answeredInSection = currentQuestions.filter(
     (q) => answers[q.id] !== undefined
   ).length;
   const allAnsweredInSection = answeredInSection === currentQuestions.length;
-  const totalAnswered = QUESTIONS.filter((q) => answers[q.id] !== undefined).length;
+  const totalAnswered = questions.filter((q) => answers[q.id] !== undefined).length;
 
   function setAnswer(questionId: string, value: number) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -214,7 +217,7 @@ export function Assessment() {
       <div className="mt-4 h-1 w-full rounded-full bg-[var(--color-tint)] overflow-hidden">
         <div
           className="h-full bg-maroon transition-[width] duration-300"
-          style={{ width: `${(totalAnswered / QUESTIONS.length) * 100}%` }}
+          style={{ width: `${(totalAnswered / questions.length) * 100}%` }}
         />
       </div>
 

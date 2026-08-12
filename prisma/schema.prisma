@@ -49,3 +49,31 @@ model Submission {
 
   @@map("submissions")
 }
+
+// Editable settings, key-value so a new setting needs no schema change
+// against the production database. Today: "notify_email", the
+// comma-separated notification recipient list. The Setting row wins over
+// the NOTIFY_EMAIL env var, which remains a fallback.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// Text overrides for the question bank, keyed by the question id in
+// lib/questions.ts. Structure (which questions exist, their gap, the 1-5
+// scale, each level's tier) stays in code; only wording lives here.
+//
+// A missing row, or a null field, falls through to the code default, so
+// an empty table behaves exactly like the app did before this existed
+// and "reset to default" is simply deleting the row.
+model QuestionOverride {
+  questionId String   @id
+  statement  String?
+  levels     Json?
+  updatedAt  DateTime @updatedAt
+
+  @@map("question_overrides")
+}

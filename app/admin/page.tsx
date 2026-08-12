@@ -1,7 +1,11 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { LogoutButton } from "@/components/LogoutButton";
+import { NotifySettings } from "@/components/NotifySettings";
+import { DeleteSubmissionButton } from "@/components/DeleteSubmissionButton";
 import { ADMIN_COOKIE_NAME, matchAdminUser } from "@/lib/adminAuth";
+import { getNotifyRecipientsRaw } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +21,8 @@ export default async function AdminPage() {
   const submissions = await db.submission.findMany({
     orderBy: { createdAt: "desc" },
   });
+
+  const notifyRecipients = await getNotifyRecipientsRaw();
 
   const average =
     submissions.length > 0
@@ -62,6 +68,19 @@ export default async function AdminPage() {
         </div>
       </div>
 
+      <div className="mt-8">
+        <NotifySettings initial={notifyRecipients} />
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href="/admin/questions"
+          className="text-sm text-maroon hover:underline"
+        >
+          Edit questions and rating descriptions &rarr;
+        </Link>
+      </div>
+
       <a
         href="/api/admin/export"
         className="mt-6 inline-flex items-center rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)]"
@@ -82,6 +101,7 @@ export default async function AdminPage() {
               <th className="px-3 py-2 font-medium text-right">Earnings</th>
               <th className="px-3 py-2 font-medium text-right">Overall</th>
               <th className="px-3 py-2 font-medium">Band</th>
+              <th className="px-3 py-2 font-medium sr-only">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -98,11 +118,17 @@ export default async function AdminPage() {
                 <td className="px-3 py-2 text-right">{s.earningsScore}</td>
                 <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>
                 <td className="px-3 py-2 text-ink-muted">{s.readinessBand}</td>
+                <td className="px-3 py-2 text-right">
+                  <DeleteSubmissionButton
+                    id={s.id}
+                    label={`${s.prospectName ?? "this submission"}`}
+                  />
+                </td>
               </tr>
             ))}
             {submissions.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-ink-muted">
+                <td colSpan={10} className="px-3 py-8 text-center text-ink-muted">
                   No submissions yet. They&rsquo;ll show up here as soon as someone
                   finishes the assessment.
                 </td>
