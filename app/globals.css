@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand palette: a deep maroon and warm paper, replacing the
+     placeholder green from the old prototype. */
+  --color-maroon: #6d0104;
+  --color-maroon-dark: #4a0103;
+  --color-red: #ae1b1d;
+
+  --color-paper: #fbf7f5;
+  --color-paper-raised: #ffffff;
+  --color-ink: #241b1a;
+  --color-ink-muted: #6b5c59;
+  --color-line: #e7dbd8;
+
+  /* Two general-purpose light tints derived from the brand palette, used
+     for badge backgrounds, progress-bar tracks, and the text-selection
+     highlight. These used to be named after the Poor/Fair/Good/Excellent
+     tier system when the rating buttons were color-coded by tier; once
+     that became one flat maroon for "selected" (a deliberate call: no
+     color ramp), tier-good and tier-excellent had nothing left referencing
+     them and were removed, and these two were renamed to describe what
+     they actually do now instead of a coloring scheme that no longer
+     exists in the UI. */
+  --color-tint: #eeded9;
+  --color-selection: #d99c92;
+
+  --font-display: var(--font-eb-garamond);
+  --font-sans: var(--font-inter);
+}
+
+@theme inline {
+  --color-maroon: var(--color-maroon);
+  --color-maroon-dark: var(--color-maroon-dark);
+  --color-red: var(--color-red);
+  --color-paper: var(--color-paper);
+  --color-paper-raised: var(--color-paper-raised);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-line: var(--color-line);
+  --color-tint: var(--color-tint);
+  --color-selection: var(--color-selection);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-selection);
+  color: var(--color-ink);
+}
+
+/* Respect reduced-motion preferences: this is a self-assessment tool a
+   business owner fills out thoughtfully, not a product that benefits
+   from persuading anyone via motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible keyboard focus everywhere, styled instead of suppressed. */
+:focus-visible {
+  outline: 2px solid var(--color-red);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
