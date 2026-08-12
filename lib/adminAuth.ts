@@ -44,6 +44,19 @@ function timingSafeStringEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
+// Defends against the most common way ADMIN_USERS gets mis-entered in a
+// hosting dashboard: surrounding quotes and stray whitespace. A .env file
+// needs the quotes (`ADMIN_USERS="Name:pass"`) and dotenv strips them,
+// but pasting that same quoted string into Vercel's UI stores the quotes
+// literally, which would otherwise make the passcode `pass"` (with a
+// trailing quote) and silently reject the clean value forever. Trimming
+// and stripping wrapping quotes on both the name and the passcode makes
+// either form work. A passcode intentionally beginning or ending with a
+// quote is not a realistic case and not worth preserving over this.
+function clean(value: string): string {
+  return value.trim().replace(/^["']+|["']+$/g, "").trim();
+}
+
 function getAdminUsers(): { name: string; passcode: string }[] {
   const raw = process.env.ADMIN_USERS ?? "";
   return raw
@@ -53,8 +66,8 @@ function getAdminUsers(): { name: string; passcode: string }[] {
     .map((entry) => {
       const separatorIndex = entry.indexOf(":");
       if (separatorIndex === -1) return null;
-      const name = entry.slice(0, separatorIndex).trim();
-      const passcode = entry.slice(separatorIndex + 1).trim();
+      const name = clean(entry.slice(0, separatorIndex));
+      const passcode = clean(entry.slice(separatorIndex + 1));
       if (!name || !passcode) return null;
       return { name, passcode };
     })

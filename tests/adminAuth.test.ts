@@ -62,6 +62,22 @@ describe("matchAdminUser", () => {
     expect(matchAdminUser("pass-marcus-1207")).toEqual({ name: "Marcus" });
     expect(matchAdminUser("pass-priya-6630")).toEqual({ name: "Priya" });
   });
+
+  it("tolerates the whole value being wrapped in quotes (a common dashboard paste)", async () => {
+    // Pasting `"Alex:pass-alex-2026"` verbatim from an .env example into a
+    // hosting dashboard stores the quotes literally. The clean passcode
+    // must still match.
+    process.env.ADMIN_USERS = '"Alex:pass-alex-2026"';
+    const { matchAdminUser } = await freshAdminAuth();
+    expect(matchAdminUser("pass-alex-2026")).toEqual({ name: "Alex" });
+  });
+
+  it("tolerates quotes around each entry and stray whitespace", async () => {
+    process.env.ADMIN_USERS = ' "Alex:pass-alex-2026" ,  Sam: pass-sam-8841 ';
+    const { matchAdminUser } = await freshAdminAuth();
+    expect(matchAdminUser("pass-alex-2026")).toEqual({ name: "Alex" });
+    expect(matchAdminUser("pass-sam-8841")).toEqual({ name: "Sam" });
+  });
 });
 
 describe("isValidPasscode", () => {
