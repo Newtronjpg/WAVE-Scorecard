@@ -36,6 +36,28 @@ export function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
 }
 
+// The admin link in the notification email has to be clickable from
+// wherever the recipient reads their mail, so it can never be a
+// localhost URL. By default it's derived from the origin of the request
+// that submitted the assessment, which is correct on a real deploy but
+// depends on proxy headers being passed through faithfully. Setting
+// NEXT_PUBLIC_SITE_URL pins it explicitly and removes that dependency.
+// A bare host ("example.com") is accepted and assumed https; anything
+// unparseable falls back to the request origin rather than dropping the
+// link out of the email entirely.
+export function resolveAdminUrl(requestOrigin: string): string {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configured) {
+    const base = /^https?:\/\//i.test(configured) ? configured : `https://${configured}`;
+    try {
+      return new URL("/admin", base).toString();
+    } catch {
+      // Fall through to the request origin below.
+    }
+  }
+  return new URL("/admin", requestOrigin).toString();
+}
+
 export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {

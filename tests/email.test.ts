@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { sendSubmissionNotification, withTimeout, normalizeEmail } from "@/lib/email";
+import {
+  sendSubmissionNotification,
+  withTimeout,
+  normalizeEmail,
+  resolveAdminUrl,
+} from "@/lib/email";
 import type { ScoreResult } from "@/lib/scoring";
 
 const ORIGINAL_ENV = {
@@ -38,6 +43,62 @@ describe("normalizeEmail", () => {
 
   it("is a no-op on an already-normalized address", () => {
     expect(normalizeEmail("sam@example.com")).toBe("sam@example.com");
+  });
+});
+
+describe("resolveAdminUrl", () => {
+  const ORIGINAL_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
+  afterEach(() => {
+    if (ORIGINAL_SITE_URL === undefined) {
+      delete process.env.NEXT_PUBLIC_SITE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SITE_URL = ORIGINAL_SITE_URL;
+    }
+  });
+
+  it("falls back to the request origin when NEXT_PUBLIC_SITE_URL is unset", () => {
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    expect(resolveAdminUrl("https://wave.example.com")).toBe(
+      "https://wave.example.com/admin"
+    );
+  });
+
+  it("prefers NEXT_PUBLIC_SITE_URL over the request origin", () => {
+    // The whole point of the override: a request that arrived as
+    // localhost (or via a proxy that rewrote the host) must still
+    // produce a link the email recipient can actually click.
+    process.env.NEXT_PUBLIC_SITE_URL = "https://wave.example.com";
+    expect(resolveAdminUrl("http://localhost:3000")).toBe(
+      "https://wave.example.com/admin"
+    );
+  });
+
+  it("assumes https for a bare host with no scheme", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "wave.example.com";
+    expect(resolveAdminUrl("http://localhost:3000")).toBe(
+      "https://wave.example.com/admin"
+    );
+  });
+
+  it("ignores a trailing slash on the configured URL", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://wave.example.com/";
+    expect(resolveAdminUrl("http://localhost:3000")).toBe(
+      "https://wave.example.com/admin"
+    );
+  });
+
+  it("treats an empty or whitespace-only value as unset", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "   ";
+    expect(resolveAdminUrl("https://wave.example.com")).toBe(
+      "https://wave.example.com/admin"
+    );
+  });
+
+  it("falls back to the request origin when the configured URL is unparseable", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "http://";
+    expect(resolveAdminUrl("https://wave.example.com")).toBe(
+      "https://wave.example.com/admin"
+    );
   });
 });
 

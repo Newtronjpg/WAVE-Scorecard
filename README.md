@@ -181,6 +181,23 @@ email whenever someone finishes the assessment, name, company, overall
 score, and a link straight to `/admin`. Leave both unset to skip this
 entirely; the assessment and admin review both work fine without it.
 
+Two things worth knowing about this email:
+
+- **It goes to your staff, not to the person taking the assessment.**
+  `NOTIFY_EMAIL` is the only recipient.
+- **Until you verify a domain in Resend, that recipient can only be the
+  address the Resend account was created with.** Pointing `NOTIFY_EMAIL`
+  at anyone else makes the notifications silently stop rather than
+  reroute. Verify a domain first if other staff need to receive them.
+
+The `/admin` link inside the email is derived from the origin of the
+request that submitted the assessment, so a submission made on the
+deployed site produces a deployed link (a submission made against
+`localhost` during local testing correctly produces a localhost link).
+If your emails ever arrive with a wrong or unclickable link, set
+`NEXT_PUBLIC_SITE_URL` to the site's public base URL to pin it
+explicitly.
+
 ## Project structure
 
 ```

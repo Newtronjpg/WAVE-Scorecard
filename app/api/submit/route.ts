@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
 import { QUESTIONS } from "@/lib/questions";
-import { sendSubmissionNotification } from "@/lib/email";
+import { resolveAdminUrl, sendSubmissionNotification } from "@/lib/email";
 
 // Every question id must be present with an integer rating 1-5. Building
 // the schema from QUESTIONS (rather than hand-listing 28 keys) means
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     prospectName,
     companyName,
     result,
-    adminUrl: new URL("/admin", req.nextUrl.origin).toString(),
+    adminUrl: resolveAdminUrl(req.nextUrl.origin),
   });
   if (!notification.sent) {
     console.log("Submission notification not sent:", notification.reason);
