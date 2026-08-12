@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
   // exists so the email outcome shows up directly in whatever terminal
   // is testing /api/submit, curl's own stdout included, instead of
   // needing to go find it in a separate server log window. On the real
-  // deploy this field never appears at all, so it can't leak Resend
+  // deploy this field never appears at all, so it can't leak mail
   // error text or delivery status to an actual client.
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json(result);

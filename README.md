@@ -56,13 +56,15 @@ after that, every `git push` auto-deploys.
    pairs, one per person who needs to review submissions, e.g.
    `Alex:pass-alex-2026,Sam:pass-sam-8841`. Add or remove people later by
    editing this one variable and redeploying, no code changes.
-6. **Optional: email notifications.** Sign up free at resend.com, create
-   an API key, and add `RESEND_API_KEY` and `NOTIFY_EMAIL` (the address
-   that should get notified) as environment variables too. Until your
-   own domain is verified in Resend, `NOTIFY_EMAIL` has to be the exact
-   address the Resend account was created with, a Resend restriction, not
-   this app's. Leave both blank to skip notifications; nothing else
-   breaks.
+6. **Optional: email notifications.** Notifications are sent through
+   Gmail's SMTP server using an App Password. On the sending Google
+   account, turn on 2-Step Verification, then generate an App Password
+   (Google Account -> Security -> App passwords -> "Mail"). Add
+   `GMAIL_USER` (the sending address), `GMAIL_APP_PASSWORD` (the 16-char
+   App Password), and `NOTIFY_EMAIL` (who to notify, one address or
+   several comma-separated) as environment variables. Gmail delivers to
+   any recipient with no domain-verification step. Leave these blank to
+   skip notifications; nothing else breaks.
 7. **Push the schema to the new database.** With `DATABASE_URL` from
    Vercel's dashboard copied into a local `.env`, run
    `npx prisma db push` once from your machine to create the
@@ -176,19 +178,27 @@ IT.
 
 ## Email notifications
 
-Set `RESEND_API_KEY` and `NOTIFY_EMAIL` (see `.env.example`) to get an
-email whenever someone finishes the assessment, name, company, overall
-score, and a link straight to `/admin`. Leave both unset to skip this
-entirely; the assessment and admin review both work fine without it.
+Set `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `NOTIFY_EMAIL` (see
+`.env.example`) to get an email whenever someone finishes the assessment,
+name, company, overall score, and a link straight to `/admin`. Leave them
+unset to skip this entirely; the assessment and admin review both work
+fine without it.
 
-Two things worth knowing about this email:
+The email is sent from a Gmail account you control, using an App Password
+(generated under that account's Security -> App passwords, with 2-Step
+Verification on). A few things worth knowing:
 
 - **It goes to your staff, not to the person taking the assessment.**
-  `NOTIFY_EMAIL` is the only recipient.
-- **Until you verify a domain in Resend, that recipient can only be the
-  address the Resend account was created with.** Pointing `NOTIFY_EMAIL`
-  at anyone else makes the notifications silently stop rather than
-  reroute. Verify a domain first if other staff need to receive them.
+  `NOTIFY_EMAIL` is the recipient list.
+- **You can notify more than one person.** `NOTIFY_EMAIL` accepts a
+  comma-separated list, e.g. `owner@example.com,partner@example.com`.
+- **Gmail delivers to any recipient with no domain setup**, unlike a
+  transactional-email sandbox. The only requirement is that
+  `GMAIL_USER`/`GMAIL_APP_PASSWORD` belong to a real Google account.
+- **Store the App Password only in your host's environment variables**
+  (Vercel Project Settings, or a local gitignored `.env`), never in code.
+  Free Gmail sending caps out around 500 recipients/day, far above this
+  app's needs.
 
 The `/admin` link inside the email is derived from the origin of the
 request that submitted the assessment, so a submission made on the
@@ -212,7 +222,7 @@ lib/
   actionLibrary.ts         dormant: per-question recommended actions
   comboRules.ts             dormant: cross-question rules
   excel.ts                  builds the .xlsx export
-  email.ts                   optional submission-notification emails via Resend
+  email.ts                   optional submission-notification emails via Gmail SMTP
   db.ts                      Prisma client
   adminAuth.ts               multi-user passcode check (constant-time, Edge-runtime safe)
 components/

@@ -14,15 +14,16 @@
     "@prisma/client": "^6.19.3",
     "exceljs": "^4.4.0",
     "next": "16.3.0",
+    "nodemailer": "^6.10.1",
     "prisma": "^6.19.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "resend": "^6.19.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.5",

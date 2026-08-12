@@ -1,28 +1,24 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import type { ScoreResult } from "./scoring";
 
 // Notifies staff by email when a client finishes the assessment.
 //
-// Sends from Resend's shared onboarding@resend.dev address, which works
-// with zero setup but has one hard restriction: it can only deliver to
-// the exact email address the Resend account was created with (a
-// platform anti-abuse rule, not something this code can work around).
-// That's fine to start: NOTIFY_EMAIL should just be your own address.
-// Once the firm's domain has DNS access sorted and gets verified in
-// Resend, change RESEND_FROM to a real address on that domain and this
-// can notify anyone, no code changes needed, both are plain env vars.
+// Sends through Gmail's SMTP server using an App Password (a 16-character
+// credential generated in the sending account's Google security
+// settings, distinct from the account's real password and revocable on
+// its own). Two env vars carry the credential: GMAIL_USER (the sending
+// address) and GMAIL_APP_PASSWORD. Unlike a shared transactional-email
+// sandbox, this can deliver to ANY recipient with no domain-verification
+// step, so NOTIFY_EMAIL can be any address, or several.
 //
-// "Exact address" turned out to mean exact, including case: Resend
-// rejected Example.User@gmail.com against an account created as
-// example.user@gmail.com, even though Gmail itself treats those as the
-// identical inbox. normalizeEmail() below fixes that at the source, so
-// how anyone happens to type NOTIFY_EMAIL (or a future admin's address)
-// in .env never matters again.
+// NOTIFY_EMAIL accepts a comma-separated list, so more than one person
+// (e.g. the owner plus a partner) can be notified. Each address is
+// trimmed and lowercased; blank entries are dropped.
 //
 // Failure here is deliberately non-fatal, AND deliberately bounded. A
 // submission has already been scored and saved by the time this runs
 // (see app/api/submit/route.ts); if the notification fails OR simply
-// takes too long (a slow network path to Resend, a firewall silently
+// takes too long (a slow network path to Gmail, a firewall silently
 // dropping the connection, anything), the person taking the assessment
 // still needs to see their results promptly. Without a timeout, an
 // `await` on a hung network call blocks the entire response
@@ -34,6 +30,16 @@ const TIMEOUT_MS = 8000;
 
 export function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
+}
+
+// Parses NOTIFY_EMAIL into a clean list of recipients. Accepts a single
+// address or a comma-separated list; trims and lowercases each; drops
+// blanks. Returns [] when nothing usable is configured.
+export function parseRecipients(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map(normalizeEmail)
+    .filter(Boolean);
 }
 
 // The admin link in the notification email has to be clickable from
@@ -80,29 +86,38 @@ export interface NotificationDetails {
 export async function sendSubmissionNotification(
   details: NotificationDetails
 ): Promise<{ sent: boolean; reason?: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const rawTo = process.env.NOTIFY_EMAIL;
+  const user = process.env.GMAIL_USER?.trim();
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  const recipients = parseRecipients(process.env.NOTIFY_EMAIL);
 
-  if (!apiKey || !rawTo) {
+  if (!user || !pass || recipients.length === 0) {
     // Not configured. This is a normal, expected state (e.g. local dev,
-    // or before a Resend account has been set up), not an error.
+    // or before Gmail credentials have been set), not an error.
     return { sent: false, reason: "not configured" };
   }
-  const to = normalizeEmail(rawTo);
 
   try {
-    const resend = new Resend(apiKey);
-    const from = process.env.RESEND_FROM || "WAVE Scorecard <onboarding@resend.dev>";
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+    });
+
+    // A friendly From name is optional; the address must be the
+    // authenticated Gmail account (or an alias Gmail is configured to
+    // "send mail as"), so it's always derived from GMAIL_USER.
+    const from = `WAVE Scorecard <${user}>`;
     const { prospectName, companyName, result } = details;
 
     const gapLines = result.gaps
       .map((g) => `${g.name}: ${g.score}/100`)
       .join("\n");
 
-    const { error } = await withTimeout(
-      resend.emails.send({
+    await withTimeout(
+      transporter.sendMail({
         from,
-        to,
+        to: recipients,
         subject: `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
         text: `${prospectName} at ${companyName} just finished the WAVE Scorecard.
 
@@ -115,13 +130,9 @@ Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
 Full submission and export: ${details.adminUrl}`,
       }),
       TIMEOUT_MS,
-      "Resend send"
+      "Gmail send"
     );
 
-    if (error) {
-      console.error("Resend returned an error sending submission notification:", error);
-      return { sent: false, reason: error.message };
-    }
     return { sent: true };
   } catch (e) {
     console.error("Failed to send submission notification email:", e);

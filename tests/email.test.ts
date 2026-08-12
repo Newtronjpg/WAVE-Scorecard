@@ -3,12 +3,14 @@ import {
   sendSubmissionNotification,
   withTimeout,
   normalizeEmail,
+  parseRecipients,
   resolveAdminUrl,
 } from "@/lib/email";
 import type { ScoreResult } from "@/lib/scoring";
 
 const ORIGINAL_ENV = {
-  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  GMAIL_USER: process.env.GMAIL_USER,
+  GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD,
   NOTIFY_EMAIL: process.env.NOTIFY_EMAIL,
 };
 
@@ -28,12 +30,6 @@ function fakeResult(): ScoreResult {
 
 describe("normalizeEmail", () => {
   it("lowercases mixed-case addresses", () => {
-    // The exact bug found in the field: Resend rejected
-    // "Example.User@gmail.com" as not matching the account's address,
-    // even though Gmail itself treats it identically to
-    // "example.user@gmail.com". Resend's check is apparently an exact
-    // string match, not case-insensitive, so this has to be normalized
-    // before it ever reaches them.
     expect(normalizeEmail("Example.User@gmail.com")).toBe("example.user@gmail.com");
   });
 
@@ -43,6 +39,33 @@ describe("normalizeEmail", () => {
 
   it("is a no-op on an already-normalized address", () => {
     expect(normalizeEmail("sam@example.com")).toBe("sam@example.com");
+  });
+});
+
+describe("parseRecipients", () => {
+  it("returns an empty list for undefined, empty, or whitespace input", () => {
+    expect(parseRecipients(undefined)).toEqual([]);
+    expect(parseRecipients("")).toEqual([]);
+    expect(parseRecipients("   ")).toEqual([]);
+    expect(parseRecipients(",, ,")).toEqual([]);
+  });
+
+  it("parses a single address", () => {
+    expect(parseRecipients("owner@example.com")).toEqual(["owner@example.com"]);
+  });
+
+  it("splits, trims, and lowercases a comma-separated list", () => {
+    expect(parseRecipients("Owner@Example.com, Dana@Firm.com")).toEqual([
+      "owner@example.com",
+      "dana@firm.com",
+    ]);
+  });
+
+  it("drops blank entries from a ragged list", () => {
+    expect(parseRecipients("owner@example.com, ,dana@firm.com,")).toEqual([
+      "owner@example.com",
+      "dana@firm.com",
+    ]);
   });
 });
 
@@ -138,7 +161,8 @@ describe("sendSubmissionNotification", () => {
   });
 
   it("does not attempt to send, and does not throw, when unconfigured", async () => {
-    delete process.env.RESEND_API_KEY;
+    delete process.env.GMAIL_USER;
+    delete process.env.GMAIL_APP_PASSWORD;
     delete process.env.NOTIFY_EMAIL;
 
     const outcome = await sendSubmissionNotification({
@@ -152,8 +176,9 @@ describe("sendSubmissionNotification", () => {
     expect(outcome.reason).toBe("not configured");
   });
 
-  it("does not attempt to send when only the API key is set but no recipient", async () => {
-    process.env.RESEND_API_KEY = "re_fake_key_for_testing";
+  it("does not attempt to send when credentials are set but no recipient", async () => {
+    process.env.GMAIL_USER = "sender@gmail.com";
+    process.env.GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
     delete process.env.NOTIFY_EMAIL;
 
     const outcome = await sendSubmissionNotification({
@@ -164,19 +189,42 @@ describe("sendSubmissionNotification", () => {
     });
 
     expect(outcome.sent).toBe(false);
+    expect(outcome.reason).toBe("not configured");
   });
 
-  it("never throws even with a garbage API key (fails gracefully, caller unaffected)", async () => {
-    process.env.RESEND_API_KEY = "not-a-real-key";
+  it("does not attempt to send when a recipient is set but credentials are missing", async () => {
+    delete process.env.GMAIL_USER;
+    delete process.env.GMAIL_APP_PASSWORD;
+    process.env.NOTIFY_EMAIL = "owner@example.com";
+
+    const outcome = await sendSubmissionNotification({
+      prospectName: "Jane Owner",
+      companyName: "Acme Fabrication",
+      result: fakeResult(),
+      adminUrl: "http://localhost:3000/admin",
+    });
+
+    expect(outcome.sent).toBe(false);
+    expect(outcome.reason).toBe("not configured");
+  });
+
+  it("never throws even with bad credentials (fails gracefully, caller unaffected)", async () => {
+    // Fully configured but the credentials are wrong and/or the SMTP
+    // host is unreachable from the test environment. The call must still
+    // resolve (never reject), so a submission response is never blocked
+    // by a mail failure. Bounded by TIMEOUT_MS so it can't hang the run.
+    process.env.GMAIL_USER = "sender@gmail.com";
+    process.env.GMAIL_APP_PASSWORD = "not-a-real-app-password";
     process.env.NOTIFY_EMAIL = "test@example.com";
 
-    await expect(
-      sendSubmissionNotification({
-        prospectName: "Jane Owner",
-        companyName: "Acme Fabrication",
-        result: fakeResult(),
-        adminUrl: "http://localhost:3000/admin",
-      })
-    ).resolves.toBeDefined();
-  });
+    const outcome = await sendSubmissionNotification({
+      prospectName: "Jane Owner",
+      companyName: "Acme Fabrication",
+      result: fakeResult(),
+      adminUrl: "http://localhost:3000/admin",
+    });
+
+    expect(outcome).toBeDefined();
+    expect(outcome.sent).toBe(false);
+  }, 15000);
 });
