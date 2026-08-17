@@ -92,8 +92,10 @@ choice count; derived ones cannot.
 1. **A gap with no questions** divides by zero and yields `NaN`, which would
    flow into a stored `Int` column. Validation forbids it, and
    `scoreAssessment` throws a named error rather than returning `NaN`.
-2. **A two-choice question** can only ever score 0 or 100. Permitted, but the
-   editor warns; three is the practical floor.
+2. **A two-choice question** can only ever score 0 or 100, so it swings its gap
+   score harder than any other question. Permitted, but the editor raises an
+   explicit warning when the count drops to two, naming that consequence. The
+   warning does not block saving or publishing.
 
 ## Data model
 
@@ -218,6 +220,7 @@ edits cannot be:
 | `POST /api/admin/questions/rollback` | Append an old version's content as a new version |
 | `POST /api/admin/questions/reset-draft` | Draft := live, or draft := factory |
 | `POST /api/admin/preview-score` | Score an answer map against the draft |
+| `GET /api/admin/submissions/[id]/export` | Single-run workbook (see Excel) |
 
 `PUT .../draft` carries the `updatedAt` the client loaded and returns **409** if
 it has moved, so two people in the admin cannot silently overwrite each other.
@@ -252,14 +255,20 @@ in `proxy.ts`.
 
 ## Excel export
 
-Two changes to `lib/excel.ts`.
+The export splits into two, because the two jobs are different: scanning many
+runs, and reading one run in detail.
 
-**Submissions sheet** gains a `Question set` column (the version number, or
-`factory` when null), so a run can be tied to the version it answered.
-Question columns are built from the union of the live question ids and every id
-actually present in the exported rows, ordered live-set-first with orphans
-appended. Without this, deleting a question would silently drop its historical
-answers from the export.
+### Summary workbook — `GET /api/admin/export` (existing route, slimmed)
+
+**Submissions sheet** drops the per-question answer columns entirely. It
+becomes a scannable client list: Submitted, Prospect name, Company, the four
+gap scores, Overall, Readiness band, and a new `Question set` column (the
+version number, or `factory` when null).
+
+Removing those columns also removes a problem: with no per-question columns,
+deleting a question can no longer orphan a column or silently drop historical
+answers from the export. The union-of-ids logic an earlier draft of this spec
+called for is no longer needed anywhere.
 
 **New `Question sets` sheet**, one row per question per published version:
 
@@ -267,9 +276,33 @@ answers from the export.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 
 Choice columns are sparse, filled to that question's choice count, each holding
-the label and description. This makes the workbook self-explaining: a reader
-can see what a given rating meant on a given question at the time a run was
-taken, without access to the admin UI.
+the label and description. This is what tracks question changes over time: a
+reader can see what a given rating meant on a given question in a given
+version, without access to the admin UI.
+
+### Single-run workbook — `GET /api/admin/submissions/[id]/export` (new)
+
+One run, fully expanded, against **the question set that run actually
+answered** — resolved from the row's `questionSetVersion`, falling back to the
+factory set when it is null or the version is missing, and labelling which was
+used.
+
+A header block (prospect, company, submitted, overall score, band, question set
+version), then the four gap scores, then one row per question:
+
+| Question ID | Gap | Statement | Answer | Answer label | What that answer meant | Score /100 |
+| --- | --- | --- | --- | --- | --- | --- |
+
+`Score /100` is that question's normalized value, so the arithmetic behind each
+gap score is visible and checkable in the file.
+
+Filename is `wave-{company}-{date}.xlsx`, sanitized. Reached from an Export
+button on each row of the admin submissions table, next to the existing delete
+control.
+
+The admin table's footnote ("Raw answers for every question are in the Excel
+export, not in this table") stops being true when the summary sheet loses its
+answer columns, and is reworded to point at the per-row export instead.
 
 ## Testing
 
@@ -284,7 +317,7 @@ TDD throughout: red, verify red, green, verify green.
 | `tests/adminQuestionRoutes.test.ts` | Replaces the per-question route tests: draft read/write, the 409 conflict, publish, rollback appending rather than rewriting, reset. |
 | `tests/previewScore.test.ts` | Scores against the draft; asserts no row is written and no email is sent. |
 | `tests/submitRoute.test.ts` | Updated: validator built from the published set, per-question max, `questionSetVersion` recorded. |
-| `tests/excel.test.ts` | Orphaned question columns preserved; the version sheet's shape. |
+| `tests/excel.test.ts` | Summary sheet carries no per-question columns; the version sheet's shape; the single-run sheet resolves against the run's own version and falls back to factory when it is null. |
 
 ## Deployment
 
