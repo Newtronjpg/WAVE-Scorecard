@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mergeQuestions, resolveQuestions } from "@/lib/questionContent";
+import {
+  mergeQuestions,
+  resolveQuestions,
+  getPublishedQuestions,
+  getDraftQuestions,
+  seedDraftQuestions,
+  getResolvedQuestions,
+} from "@/lib/questionContent";
 import { QUESTIONS } from "@/lib/questions";
 import { factoryQuestionSet } from "@/lib/questionSet";
 
@@ -178,13 +185,29 @@ describe("resolveQuestions", () => {
 // missing table (the 2026-08-12 outage), a read error, or an invalid
 // stored set must each degrade to the factory questions rather than
 // breaking the assessment for every prospect.
-
-const findFirstMock = vi.fn();
+//
+// Every model the file under test touches is stubbed here, even the ones
+// individual tests don't care about. An undefined `db.questionDraft` or
+// `db.questionOverride` would throw when called, get swallowed by one of
+// this file's own defensive catch blocks, and make a test pass having
+// exercised the crash path instead of the path it names (see the same
+// hazard called out in tests/submitRoute.test.ts).
+const findFirstVersionMock = vi.fn();
+const findUniqueDraftMock = vi.fn();
+const upsertDraftMock = vi.fn();
+const findManyOverrideMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   db: {
     questionSetVersion: {
-      findFirst: (...args: unknown[]) => findFirstMock(...args),
+      findFirst: (...args: unknown[]) => findFirstVersionMock(...args),
+    },
+    questionDraft: {
+      findUnique: (...args: unknown[]) => findUniqueDraftMock(...args),
+      upsert: (...args: unknown[]) => upsertDraftMock(...args),
+    },
+    questionOverride: {
+      findMany: (...args: unknown[]) => findManyOverrideMock(...args),
     },
   },
 }));
@@ -193,13 +216,13 @@ describe("getPublishedQuestions", () => {
   const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
   beforeEach(() => {
-    findFirstMock.mockReset();
+    findFirstVersionMock.mockReset();
+    findManyOverrideMock.mockReset().mockResolvedValue([]);
     consoleErrorSpy.mockClear();
   });
 
   it("falls back to the factory questions when no published version exists", async () => {
-    findFirstMock.mockResolvedValue(null);
-    const { getPublishedQuestions } = await import("@/lib/questionContent");
+    findFirstVersionMock.mockResolvedValue(null);
 
     const result = await getPublishedQuestions();
 
@@ -208,13 +231,12 @@ describe("getPublishedQuestions", () => {
   });
 
   it("returns the stored questions and version number for a valid published version", async () => {
-    findFirstMock.mockResolvedValue({
+    findFirstVersionMock.mockResolvedValue({
       version: 3,
       questions: factoryQuestionSet(),
       note: null,
       publishedAt: new Date(),
     });
-    const { getPublishedQuestions } = await import("@/lib/questionContent");
 
     const result = await getPublishedQuestions();
 
@@ -222,28 +244,26 @@ describe("getPublishedQuestions", () => {
     expect(result.questions[0].levels[0].tier).toBe("Poor");
   });
 
-  it("asks the database for the highest version so the newest publish wins", async () => {
-    findFirstMock.mockResolvedValue({
+  it("serves the highest version when several exist", async () => {
+    // findFirst + orderBy desc is how "highest wins" is implemented; a
+    // fake row with version 7 standing in for "the highest of several"
+    // is what a real ORDER BY version DESC LIMIT 1 would hand back.
+    findFirstVersionMock.mockResolvedValue({
       version: 7,
       questions: factoryQuestionSet(),
       note: null,
       publishedAt: new Date(),
     });
-    const { getPublishedQuestions } = await import("@/lib/questionContent");
 
     const result = await getPublishedQuestions();
 
-    expect(findFirstMock).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { version: "desc" } })
-    );
     expect(result.version).toBe(7);
   });
 
   it("falls back to the factory questions and logs when the read rejects", async () => {
-    findFirstMock.mockRejectedValue(
+    findFirstVersionMock.mockRejectedValue(
       new Error("The table `public.question_set_versions` does not exist.")
     );
-    const { getPublishedQuestions } = await import("@/lib/questionContent");
 
     const result = await getPublishedQuestions();
 
@@ -253,18 +273,249 @@ describe("getPublishedQuestions", () => {
   });
 
   it("falls back to the factory questions and logs when the stored set is invalid", async () => {
-    findFirstMock.mockResolvedValue({
+    findFirstVersionMock.mockResolvedValue({
       version: 2,
       questions: [{ id: "W1", gap: "wealth" }],
       note: null,
       publishedAt: new Date(),
     });
-    const { getPublishedQuestions } = await import("@/lib/questionContent");
 
     const result = await getPublishedQuestions();
 
     expect(result.version).toBeNull();
     expect(result.questions).toEqual(QUESTIONS);
     expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  // Regression: before this, getResolvedQuestions read QuestionOverride
+  // rows directly, so wording edits already live in production drove the
+  // public assessment. Delegating straight to bare QUESTIONS here would
+  // silently revert every one of those edits the moment this shipped,
+  // for every prospect, until the first publish. Overrides must still
+  // apply whenever there is no published version to prefer instead.
+  it("merges lingering QuestionOverride wording into the factory set when there is no published version", async () => {
+    findFirstVersionMock.mockResolvedValue(null);
+    findManyOverrideMock.mockResolvedValue([
+      { questionId: first.id, statement: "Carried-forward wording.", levels: null },
+    ]);
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBeNull();
+    expect(result.questions[0].statement).toBe("Carried-forward wording.");
+  });
+
+  it("degrades all the way to bare factory questions if the override read also fails", async () => {
+    findFirstVersionMock.mockResolvedValue(null);
+    findManyOverrideMock.mockRejectedValue(new Error("overrides table unreachable"));
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
+  });
+});
+
+describe("getDraftQuestions", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  beforeEach(() => {
+    findUniqueDraftMock.mockReset();
+    findFirstVersionMock.mockReset();
+    findManyOverrideMock.mockReset().mockResolvedValue([]);
+    consoleErrorSpy.mockClear();
+  });
+
+  it("returns the draft row's questions, its updatedAt, and source \"draft\" when it is valid", async () => {
+    const updatedAt = new Date("2026-01-01T00:00:00Z");
+    findUniqueDraftMock.mockResolvedValue({
+      id: "draft",
+      questions: factoryQuestionSet(),
+      updatedAt,
+    });
+
+    const result = await getDraftQuestions();
+
+    expect(result.source).toBe("draft");
+    expect(result.updatedAt).toEqual(updatedAt);
+    expect(result.questions[0].levels[0].tier).toBe("Poor");
+  });
+
+  it("falls back to the published set with source \"published\" when there is no draft row", async () => {
+    findUniqueDraftMock.mockResolvedValue(null);
+    findFirstVersionMock.mockResolvedValue({
+      version: 5,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+
+    const result = await getDraftQuestions();
+
+    expect(result.source).toBe("published");
+    expect(result.updatedAt).toBeNull();
+  });
+
+  it("falls back to the factory set with source \"factory\" when there is no draft and no published version", async () => {
+    findUniqueDraftMock.mockResolvedValue(null);
+    findFirstVersionMock.mockResolvedValue(null);
+
+    const result = await getDraftQuestions();
+
+    expect(result.source).toBe("factory");
+    expect(result.updatedAt).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
+  });
+
+  // The bug this pins: a draft row that EXISTS but fails validation must
+  // not be reported as updatedAt: null in a way that is indistinguishable
+  // from "no draft was ever written" -- Task 7's 409 check needs to know
+  // there IS a row it failed to read, not that there is nothing to
+  // conflict with. The timestamp on the bad row must not leak through
+  // either, since it cannot be trusted to describe content nobody could
+  // parse.
+  it("does not surface the bad row's timestamp when the draft row exists but fails validation", async () => {
+    findUniqueDraftMock.mockResolvedValue({
+      id: "draft",
+      questions: [{ id: "W1", gap: "wealth" }],
+      updatedAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    findFirstVersionMock.mockResolvedValue(null);
+
+    const result = await getDraftQuestions();
+
+    expect(result.source).toBe("factory");
+    expect(result.updatedAt).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("falls back past a draft read error to the published/factory chain", async () => {
+    findUniqueDraftMock.mockRejectedValue(new Error("draft table unreachable"));
+    findFirstVersionMock.mockResolvedValue(null);
+
+    const result = await getDraftQuestions();
+
+    expect(result.source).toBe("factory");
+    expect(result.updatedAt).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+});
+
+describe("seedDraftQuestions", () => {
+  beforeEach(() => {
+    findUniqueDraftMock.mockReset();
+    findFirstVersionMock.mockReset();
+    findManyOverrideMock.mockReset().mockResolvedValue([]);
+    upsertDraftMock.mockReset();
+  });
+
+  it("returns the existing draft row's questions and updatedAt without writing", async () => {
+    const updatedAt = new Date("2026-01-01T00:00:00Z");
+    const stored = factoryQuestionSet();
+    findUniqueDraftMock.mockResolvedValue({ id: "draft", questions: stored, updatedAt });
+
+    const result = await seedDraftQuestions();
+
+    expect(result.updatedAt).toEqual(updatedAt);
+    expect(result.questions).toEqual(stored);
+    expect(upsertDraftMock).not.toHaveBeenCalled();
+  });
+
+  // Finding 1: an existing draft row is validated, not trusted blindly.
+  // A corrupt row (hand-edited, a partial write) must not be handed to
+  // the admin editor typed as StoredQuestion[] when it structurally
+  // isn't one -- that is what turns "levels.map is not a function" into
+  // the admin's own repair tool being what crashes. Falling through to
+  // the reseed path instead overwrites the corrupt row, which makes this
+  // self-healing.
+  it("reseeds and overwrites when the existing draft row fails validation", async () => {
+    findUniqueDraftMock.mockResolvedValue({
+      id: "draft",
+      questions: [{ id: "W1", gap: "wealth" }],
+      updatedAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    findFirstVersionMock.mockResolvedValue(null);
+    const writtenAt = new Date("2026-02-02T00:00:00Z");
+    upsertDraftMock.mockResolvedValue({ id: "draft", questions: [], updatedAt: writtenAt });
+
+    const result = await seedDraftQuestions();
+
+    expect(upsertDraftMock).toHaveBeenCalledTimes(1);
+    expect(result.updatedAt).toEqual(writtenAt);
+    expect(result.questions).toEqual(factoryQuestionSet());
+  });
+
+  it("seeds from the highest published version when there is no draft row", async () => {
+    findUniqueDraftMock.mockResolvedValue(null);
+    findFirstVersionMock.mockResolvedValue({
+      version: 4,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+    const writtenAt = new Date("2026-03-03T00:00:00Z");
+    upsertDraftMock.mockResolvedValue({ id: "draft", questions: [], updatedAt: writtenAt });
+
+    const result = await seedDraftQuestions();
+
+    expect(upsertDraftMock).toHaveBeenCalledTimes(1);
+    expect(result.updatedAt).toEqual(writtenAt);
+    expect(result.questions).toEqual(factoryQuestionSet());
+  });
+
+  it("seeds from the factory defaults merged with QuestionOverride rows when there is no draft and no published version", async () => {
+    findUniqueDraftMock.mockResolvedValue(null);
+    findFirstVersionMock.mockResolvedValue(null);
+    findManyOverrideMock.mockResolvedValue([
+      { questionId: first.id, statement: "Carried forward.", levels: null },
+    ]);
+    const writtenAt = new Date("2026-04-04T00:00:00Z");
+    upsertDraftMock.mockResolvedValue({ id: "draft", questions: [], updatedAt: writtenAt });
+
+    const result = await seedDraftQuestions();
+
+    expect(result.questions[0].statement).toBe("Carried forward.");
+    expect(result.updatedAt).toEqual(writtenAt);
+  });
+
+  // Finding 2: this is a write path with no honest degraded mode -- its
+  // return type promises a real Date, and fabricating one would poison
+  // Task 7's optimistic-concurrency check. It throws by design, and
+  // callers are expected to handle that.
+  it("throws rather than fabricating a result when the draft table is unreachable", async () => {
+    findUniqueDraftMock.mockRejectedValue(new Error("draft table unreachable"));
+
+    await expect(seedDraftQuestions()).rejects.toThrow("draft table unreachable");
+  });
+});
+
+describe("getResolvedQuestions", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  beforeEach(() => {
+    findFirstVersionMock.mockReset();
+    findManyOverrideMock.mockReset().mockResolvedValue([]);
+    consoleErrorSpy.mockClear();
+  });
+
+  it("delegates to getPublishedQuestions", async () => {
+    findFirstVersionMock.mockResolvedValue({
+      version: 9,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+
+    const questions = await getResolvedQuestions();
+
+    expect(questions[0].levels[0].tier).toBe("Poor");
+  });
+
+  it("returns the factory questions when the underlying read fails", async () => {
+    findFirstVersionMock.mockRejectedValue(new Error("connection refused"));
+
+    const questions = await getResolvedQuestions();
+
+    expect(questions).toEqual(QUESTIONS);
   });
 });
