@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { mergeQuestions } from "@/lib/questionContent";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mergeQuestions, resolveQuestions } from "@/lib/questionContent";
 import { QUESTIONS } from "@/lib/questions";
+import { factoryQuestionSet } from "@/lib/questionSet";
 
 // Admin edits are stored as OVERRIDES on top of lib/questions.ts, which
 // keeps owning structure: which questions exist, their gap, the 1-5
@@ -150,5 +151,120 @@ describe("mergeQuestions", () => {
     ]);
     expect(merged[0].statement).toBe("One.");
     expect(merged[5].statement).toBe("Two.");
+  });
+});
+
+describe("resolveQuestions", () => {
+  it("returns tier-annotated questions for a valid stored set", () => {
+    const questions = resolveQuestions(factoryQuestionSet());
+    expect(questions).not.toBeNull();
+    expect(questions![0].levels[0].tier).toBe("Poor");
+  });
+
+  it("returns null for a stored set that fails validation", () => {
+    // A stored set can be invalid even though the API validated it on the
+    // way in: an older version, a hand-edited row, a partial write. The
+    // caller falls back to the factory set rather than serving this.
+    expect(resolveQuestions([{ id: "W1", gap: "wealth" }])).toBeNull();
+  });
+
+  it("returns null rather than throwing for junk", () => {
+    expect(resolveQuestions("not a question set")).toBeNull();
+    expect(resolveQuestions(null)).toBeNull();
+  });
+});
+
+// Asserts the fallback chain, which is the safety-critical part: a
+// missing table (the 2026-08-12 outage), a read error, or an invalid
+// stored set must each degrade to the factory questions rather than
+// breaking the assessment for every prospect.
+
+const findFirstMock = vi.fn();
+
+vi.mock("@/lib/db", () => ({
+  db: {
+    questionSetVersion: {
+      findFirst: (...args: unknown[]) => findFirstMock(...args),
+    },
+  },
+}));
+
+describe("getPublishedQuestions", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  beforeEach(() => {
+    findFirstMock.mockReset();
+    consoleErrorSpy.mockClear();
+  });
+
+  it("falls back to the factory questions when no published version exists", async () => {
+    findFirstMock.mockResolvedValue(null);
+    const { getPublishedQuestions } = await import("@/lib/questionContent");
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
+  });
+
+  it("returns the stored questions and version number for a valid published version", async () => {
+    findFirstMock.mockResolvedValue({
+      version: 3,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+    const { getPublishedQuestions } = await import("@/lib/questionContent");
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBe(3);
+    expect(result.questions[0].levels[0].tier).toBe("Poor");
+  });
+
+  it("asks the database for the highest version so the newest publish wins", async () => {
+    findFirstMock.mockResolvedValue({
+      version: 7,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+    const { getPublishedQuestions } = await import("@/lib/questionContent");
+
+    const result = await getPublishedQuestions();
+
+    expect(findFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { version: "desc" } })
+    );
+    expect(result.version).toBe(7);
+  });
+
+  it("falls back to the factory questions and logs when the read rejects", async () => {
+    findFirstMock.mockRejectedValue(
+      new Error("The table `public.question_set_versions` does not exist.")
+    );
+    const { getPublishedQuestions } = await import("@/lib/questionContent");
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("falls back to the factory questions and logs when the stored set is invalid", async () => {
+    findFirstMock.mockResolvedValue({
+      version: 2,
+      questions: [{ id: "W1", gap: "wealth" }],
+      note: null,
+      publishedAt: new Date(),
+    });
+    const { getPublishedQuestions } = await import("@/lib/questionContent");
+
+    const result = await getPublishedQuestions();
+
+    expect(result.version).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 });

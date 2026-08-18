@@ -47,6 +47,10 @@ model Submission {
   overallScore    Int
   readinessBand   String
 
+  // Which published question set this run answered. Null means the
+  // factory default, including every run taken before versioning existed.
+  questionSetVersion Int?
+
   @@map("submissions")
 }
 
@@ -87,4 +91,28 @@ model RateLimit {
   windowStart DateTime
 
   @@map("rate_limits")
+}
+
+// The single mutable working copy of the question set. Every write
+// upserts against the literal id "draft", so a second row is not
+// reachable through the API. Nothing here is live until it is published.
+model QuestionDraft {
+  id        String   @id @default("draft")
+  questions Json
+  updatedAt DateTime @updatedAt
+
+  @@map("question_draft")
+}
+
+// Published snapshots, append-only. The highest version is what the
+// public assessment serves. Rolling back appends a new version carrying
+// an older one's content rather than deleting rows, so this stays a true
+// log of what was live and when.
+model QuestionSetVersion {
+  version     Int      @id
+  questions   Json
+  note        String?
+  publishedAt DateTime @default(now())
+
+  @@map("question_set_versions")
 }

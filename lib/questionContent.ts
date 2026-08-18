@@ -1,20 +1,31 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { QUESTIONS, type Question, type RatingLevel } from "./questions";
+import {
+  validateQuestionSet,
+  withDerivedTiers,
+  toStored,
+  factoryQuestionSet,
+  type StoredQuestion,
+} from "./questionSet";
 
-// Resolves the question wording shown to a prospect: the defaults in
-// lib/questions.ts with any admin edits applied on top.
+// Resolves the question set shown to a prospect and the one edited in the
+// admin UI.
 //
-// lib/questions.ts stays the source of truth for STRUCTURE, which
-// questions exist, their ids, their gap, the 1-5 scale, and each level's
-// tier. The database only ever supplies replacement text. That split is
-// what makes editing safe: scoring and the submit route's validator read
-// the structural constants directly, so no edit here can change a score,
-// invalidate a past submission, or break validation.
+// The database now owns the published question set: which questions
+// exist, their ids, their gap, how many rating levels each has, and every
+// level's label/description/value. lib/questions.ts is no longer the
+// runtime source of truth -- it is the factory default, both the seed
+// data for a fresh install and the fallback whenever the database is
+// unreachable or holds something invalid. Every value read out of the
+// database passes through validateQuestionSet (lib/questionSet.ts) before
+// it is trusted; nothing here derives tiers from unvalidated input.
 //
-// The merge is deliberately total. Any override that is unrecognised,
-// malformed, or incomplete is ignored in favour of the default rather
-// than throwing. One bad row must not be able to take the assessment
-// down for every prospect.
+// The fallback chain is the safety-critical part of this file: a missing
+// table, a read error, or an invalid stored set must all degrade to the
+// factory questions rather than breaking the assessment for every
+// prospect. That is not theoretical -- a missing table caused a real
+// production outage here.
 
 export interface QuestionOverrideRow {
   questionId: string;
@@ -46,7 +57,9 @@ function usableLevels(raw: unknown): { label: string; description: string }[] | 
 }
 
 // Pure: no database, no environment. Takes the defaults and the override
-// rows and returns a new array, leaving its inputs untouched.
+// rows and returns a new array, leaving its inputs untouched. Retained
+// only for seedDraftQuestions, the one-time migration path off the old
+// QuestionOverride table.
 export function mergeQuestions(
   defaults: Question[],
   overrides: QuestionOverrideRow[]
@@ -82,15 +95,119 @@ export function mergeQuestions(
   });
 }
 
-// Reads the overrides and applies them. Falls back to the untouched
-// defaults if the read fails, so a database problem degrades the wording
-// rather than breaking the assessment.
-export async function getResolvedQuestions(): Promise<Question[]> {
+// Pure: validate, then derive tiers. Never throws -- returns null for
+// anything that fails validateQuestionSet, including a shape that isn't
+// even an array. Order matters here: withDerivedTiers has no runtime
+// guard of its own (it throws on a question with fewer than two levels),
+// so it must never run on unvalidated input.
+export function resolveQuestions(raw: unknown): Question[] | null {
+  const result = validateQuestionSet(raw);
+  if (!result.ok) return null;
+  return withDerivedTiers(result.questions);
+}
+
+// The live assessment reads this. Serves the highest-numbered published
+// version, falling back to the factory question set -- and logging why --
+// on a missing row, a read error, or a stored set that fails validation.
+export async function getPublishedQuestions(): Promise<{
+  questions: Question[];
+  version: number | null;
+}> {
   try {
-    const overrides = await db.questionOverride.findMany();
-    return mergeQuestions(QUESTIONS, overrides as QuestionOverrideRow[]);
+    const row = await db.questionSetVersion.findFirst({
+      orderBy: { version: "desc" },
+    });
+
+    if (!row) {
+      return { questions: QUESTIONS, version: null };
+    }
+
+    const questions = resolveQuestions(row.questions);
+    if (!questions) {
+      console.error(
+        `Published question set version ${row.version} failed validation; serving the factory questions instead.`
+      );
+      return { questions: QUESTIONS, version: null };
+    }
+
+    return { questions, version: row.version };
   } catch (e) {
-    console.error("Failed to read question overrides, using defaults:", e);
-    return QUESTIONS;
+    console.error("Failed to read the published question set, using the factory defaults:", e);
+    return { questions: QUESTIONS, version: null };
   }
+}
+
+// The admin editor reads this. Serves the "draft" row; if there is none
+// yet, falls back to the current published set, then to the factory
+// default. updatedAt is null only in that final, no-draft-ever-written
+// case.
+export async function getDraftQuestions(): Promise<{
+  questions: Question[];
+  updatedAt: Date | null;
+}> {
+  try {
+    const row = await db.questionDraft.findUnique({ where: { id: "draft" } });
+    if (row) {
+      const questions = resolveQuestions(row.questions);
+      if (questions) {
+        return { questions, updatedAt: row.updatedAt };
+      }
+      console.error(
+        "Draft question set failed validation; falling back to the published set."
+      );
+    }
+  } catch (e) {
+    console.error("Failed to read the draft question set, falling back to the published set:", e);
+  }
+
+  const published = await getPublishedQuestions();
+  return { questions: published.questions, updatedAt: null };
+}
+
+// The one-time migration off the old QuestionOverride table, and the
+// draft's lazy initializer: if a draft row already exists, return it
+// as-is. Otherwise seed one -- from the highest published version if
+// there is one, or else from the code defaults merged with any lingering
+// QuestionOverride rows, so wording edits made before this table existed
+// carry forward -- write it, and return what was written.
+export async function seedDraftQuestions(): Promise<{
+  questions: StoredQuestion[];
+  updatedAt: Date;
+}> {
+  const existing = await db.questionDraft.findUnique({ where: { id: "draft" } });
+  if (existing) {
+    return {
+      questions: existing.questions as unknown as StoredQuestion[],
+      updatedAt: existing.updatedAt,
+    };
+  }
+
+  const publishedRow = await db.questionSetVersion.findFirst({
+    orderBy: { version: "desc" },
+  });
+
+  let seedQuestions: StoredQuestion[];
+  if (publishedRow) {
+    const resolved = resolveQuestions(publishedRow.questions);
+    seedQuestions = resolved ? toStored(resolved) : factoryQuestionSet();
+  } else {
+    const overrides = await db.questionOverride.findMany();
+    seedQuestions = toStored(mergeQuestions(QUESTIONS, overrides as QuestionOverrideRow[]));
+  }
+
+  const written = await db.questionDraft.upsert({
+    where: { id: "draft" },
+    create: { id: "draft", questions: seedQuestions as unknown as Prisma.InputJsonValue },
+    update: { questions: seedQuestions as unknown as Prisma.InputJsonValue },
+  });
+
+  return { questions: seedQuestions, updatedAt: written.updatedAt };
+}
+
+// Deprecated: kept only so app/admin/questions/page.tsx keeps compiling
+// between this task and Task 7, which rewrites that page against
+// getDraftQuestions/getPublishedQuestions directly and deletes this
+// alias.
+export async function getResolvedQuestions(): Promise<Question[]> {
+  return (await getPublishedQuestions()).questions;
 }
