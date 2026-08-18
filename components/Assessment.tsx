@@ -40,9 +40,14 @@ const WIDEST_GAP_ADVICE: Record<Gap, string> = {
 export function Assessment({
   questions,
   version,
+  submitPath = "/api/submit",
 }: {
   questions: Question[];
   version: number | null;
+  // Lets /admin/preview reuse this exact component pointed at
+  // /api/admin/preview-score instead of forking it -- a fork would drift
+  // from the real assessment and stop being a faithful preview.
+  submitPath?: string;
 }) {
   const [view, setView] = useState<View>("intro");
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -82,7 +87,7 @@ export function Assessment({
     setView("submitting");
     setError(null);
     try {
-      const res = await fetch("/api/submit", {
+      const res = await fetch(submitPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
