@@ -66,11 +66,17 @@ function trimmed(value: unknown): string {
 
 // Validate + normalize a single question. Appends to `errors` and returns
 // a best-effort trimmed copy (used only when ok, but built either way so
-// callers don't need a second pass).
+// callers don't need a second pass). `seenIds` collects every non-empty
+// trimmed id encountered, independent of whether the question is otherwise
+// valid, so the caller's duplicate-id check sees a question even when it
+// gets excluded from the returned set for an unrelated reason (e.g. an
+// invalid gap) -- fixing that gap and re-saving must not be the only way
+// to discover a duplicate id.
 function validateQuestion(
   raw: unknown,
   index: number,
-  errors: string[]
+  errors: string[],
+  seenIds: string[]
 ): StoredQuestion | null {
   const label = `Question ${index + 1}`;
 
@@ -86,6 +92,9 @@ function validateQuestion(
   }
   const id = typeof rawId === "string" ? rawId.trim() : "";
   const tag = id.length > 0 ? id : label;
+  if (id.length > 0) {
+    seenIds.push(id);
+  }
 
   // --- id shape
   if (id.length > 0 && !ID_PATTERN.test(id)) {
@@ -169,10 +178,12 @@ function validateQuestion(
       });
     });
 
-    // Contiguity: values must be exactly 1..n once sorted, with no NaN.
-    // NaN comparisons (`NaN < 1`, `NaN > n`) are both false, so a naive
-    // range check would silently let a non-finite value through -- guard
-    // against that explicitly rather than relying on the range check below.
+    // Contiguity: values must be exactly 1..n once sorted. This only runs
+    // once every level's value has already passed the finite-number check
+    // above (hasNonFinite false) -- a level with NaN or Infinity was
+    // already rejected there, so skip the contiguity check entirely rather
+    // than let a partial `seenValues` list produce a second, confusing
+    // "not contiguous" error on top of the real one.
     if (rawLevels.length > 0) {
       const hasNonFinite = seenValues.length !== rawLevels.length;
       if (hasNonFinite) {
@@ -215,23 +226,30 @@ export function validateQuestionSet(raw: unknown): ValidateResult {
     );
   }
 
-  // Deep-copy up front so nothing downstream can mutate the caller's data,
-  // and so validateQuestion's trims never touch the original objects.
-  const copy = JSON.parse(JSON.stringify(raw)) as unknown[];
-
+  // No deep copy: validateQuestion only reads `raw` and builds fresh
+  // StoredQuestion/StoredLevel objects via trimmed() -- it never assigns
+  // back into the input, so the result is already de-aliased from the
+  // caller's data without one. A copy here would also have to go through
+  // JSON.stringify to be worth anything, which throws on inputs this
+  // function must instead reject cleanly (a circular reference, a BigInt),
+  // and would silently coerce other non-JSON values (e.g. a Date) into
+  // strings instead of failing their type checks honestly.
   const questions: StoredQuestion[] = [];
-  copy.forEach((rawQuestion, index) => {
-    const question = validateQuestion(rawQuestion, index, errors);
+  const seenIds: string[] = [];
+  raw.forEach((rawQuestion, index) => {
+    const question = validateQuestion(rawQuestion, index, errors, seenIds);
     if (question !== null) {
       questions.push(question);
     }
   });
 
-  // Duplicate ids, checked across the whole set.
+  // Duplicate ids, checked across every id seen during the per-question
+  // pass -- not just the ids of questions that ended up valid overall, so
+  // a duplicate is reported even when one copy also has an unrelated error
+  // (e.g. an invalid gap) that would otherwise exclude it from `questions`.
   const idCounts = new Map<string, number>();
-  for (const q of questions) {
-    if (q.id.length === 0) continue;
-    idCounts.set(q.id, (idCounts.get(q.id) ?? 0) + 1);
+  for (const id of seenIds) {
+    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
   }
   for (const [id, count] of idCounts) {
     if (count > 1) {

@@ -162,6 +162,83 @@ describe("validateQuestionSet rejects", () => {
     validateQuestionSet(set);
     expect(set).toEqual(before);
   });
+
+  // --- Fix round 1 coverage (findings 1-4): these paths already existed
+  // and were already correct, but nothing pinned them in place.
+
+  it("a level value that is NaN", () => {
+    const set = validSet();
+    set[0].levels[0] = { value: NaN, label: "a", description: "a" };
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("a level value that is Infinity", () => {
+    const set = validSet();
+    set[0].levels[0] = { value: Infinity, label: "a", description: "a" };
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("more than MAX_QUESTIONS questions", () => {
+    const set = Array.from({ length: 101 }, (_, i) =>
+      question(`Q${i + 1}`, i % 2 === 0 ? "wealth" : "accounting")
+    );
+    // Cover the other two gaps too, so the only failure is the count cap.
+    set.push(question("V1", "value"), question("E1", "earnings"));
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(" ")).toMatch(/100/);
+    }
+  });
+
+  it("a choice label past the length cap", () => {
+    const set = validSet();
+    set[0].levels[0].label = "x".repeat(81);
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("a choice description past the length cap", () => {
+    const set = validSet();
+    set[0].levels[0].description = "x".repeat(601);
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("an empty choice description", () => {
+    const set = validSet();
+    set[0].levels[0].description = "";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("levels that is not an array", () => {
+    const set = validSet();
+    (set[0] as { levels: unknown }).levels = "not an array";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("reports a duplicate id even when the duplicate also has an invalid gap", () => {
+    // Finding 3: an invalid-gap question used to be dropped before the
+    // duplicate-id pass ran, so this duplicate went unreported until the
+    // gap was fixed and the set re-submitted.
+    const set = validSet();
+    const dupe = question("W1", "wealth");
+    (dupe as { gap: string }).gap = "marketing";
+    set.push(dupe);
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(" ")).toMatch(/duplicate.*W1/i);
+    }
+  });
+
+  it("a circular input returns ok:false instead of throwing", () => {
+    // Finding 1: validateQuestionSet used to deep-copy via
+    // JSON.stringify, which throws on a circular structure. The function's
+    // signature promises unknown -> ValidateResult, never a throw.
+    const set = validSet();
+    (set[0] as unknown as Record<string, unknown>).self = set[0];
+    expect(() => validateQuestionSet(set)).not.toThrow();
+    expect(validateQuestionSet(set).ok).toBe(true);
+  });
 });
 
 describe("withDerivedTiers", () => {
