@@ -154,10 +154,14 @@ describe("scoreAssessment with a supplied question set", () => {
     );
   });
 
-  it("rejects an answer above that question's own choice count", () => {
+  it("rejects an answer above that question's own choice count, naming the offending question", () => {
+    // Once question sets are editable with mixed choice counts, a
+    // generic "Rating must be between 1 and 3, got 5" gives a prospect
+    // (and staff debugging a bad submission) no way to know which of
+    // many questions is at fault. The thrown message must name it.
     const questions = minimalSet(3);
     expect(() =>
       scoreAssessment({ W1: 5, A1: 2, V1: 2, E1: 2 }, questions)
-    ).toThrow();
+    ).toThrow(/W1/);
   });
 });

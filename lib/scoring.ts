@@ -135,9 +135,18 @@ export function scoreAssessment(
         `The ${gapMeta.id} gap has no questions; every gap needs at least one.`
       );
     }
-    const normalizedScores = gapQuestions.map((q) =>
-      normalizeAnswer(answers[q.id], q.levels.length)
-    );
+    const normalizedScores = gapQuestions.map((q) => {
+      try {
+        return normalizeAnswer(answers[q.id], q.levels.length);
+      } catch (err) {
+        // normalizeAnswer doesn't know which question it's scoring, so it
+        // can't say. This is user-facing (app/api/submit/route.ts returns
+        // the message verbatim), so name the question here where q.id is
+        // in hand, and keep the original detail rather than replacing it.
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(`Question ${q.id}: ${detail}`);
+      }
+    });
     const rawAverage =
       normalizedScores.reduce((sum, n) => sum + n, 0) / normalizedScores.length;
     const score = Math.round(rawAverage);
