@@ -680,8 +680,9 @@ Where the database takes ownership. The fallback behavior is the safety-critical
   - `resolveQuestions(raw: unknown): Question[] | null` — pure; validates then derives tiers, `null` when invalid.
   - `getPublishedQuestions(): Promise<{ questions: Question[]; version: number | null }>`
   - `getDraftQuestions(): Promise<{ questions: Question[]; updatedAt: Date | null }>`
-  - `seedDraftQuestions(): Promise<StoredQuestion[]>` — the migration path off `QuestionOverride`.
+  - `seedDraftQuestions(): Promise<{ questions: StoredQuestion[]; updatedAt: Date }>` — the migration path off `QuestionOverride`. It returns `updatedAt` because Task 7's editor needs it for the 409 optimistic-concurrency check, and this function writes the row so it already holds the timestamp; returning a bare array would force Task 7 into a second redundant read.
 - `mergeQuestions` is **retained**, used only by `seedDraftQuestions`.
+- `getResolvedQuestions()` is **retained as a deprecated alias** delegating to `(await getPublishedQuestions()).questions`. `app/admin/questions/page.tsx` still imports it and is not rewritten until Task 7; without the alias the build is broken at every commit from Task 3 to Task 7. Task 7 deletes it.
 
 - [ ] **Step 1: Add the schema models**
 
@@ -780,7 +781,8 @@ Keep `mergeQuestions` and its helpers as they are. Add:
 - `resolveQuestions(raw)` — `validateQuestionSet` then `withDerivedTiers`; returns `null` on failure, never throws.
 - `getPublishedQuestions()` — `db.questionSetVersion.findFirst({ orderBy: { version: "desc" } })`; on a missing row, an invalid set, or a thrown error, return `{ questions: QUESTIONS, version: null }` and `console.error` the reason.
 - `getDraftQuestions()` — read the `"draft"` row; if absent, fall back to the published set, then to factory; return `updatedAt` for the optimistic-concurrency check.
-- `seedDraftQuestions()` — if a draft row exists, return it. Otherwise build from the highest published version if there is one, else `mergeQuestions(QUESTIONS, await db.questionOverride.findMany())` so the existing wording edits carry forward, then `toStored` and write the draft row.
+- `seedDraftQuestions()` — if a draft row exists, return its questions and `updatedAt`. Otherwise build from the highest published version if there is one, else `mergeQuestions(QUESTIONS, await db.questionOverride.findMany())` so the existing wording edits carry forward, then `toStored`, write the draft row, and return the written row's questions and `updatedAt`.
+- `getResolvedQuestions()` — keep it exported as a thin deprecated alias returning `(await getPublishedQuestions()).questions`, with a comment saying Task 7 removes it. `app/admin/questions/page.tsx` imports it and is not rewritten until Task 7.
 
 Update the file's header comment: it currently states that `lib/questions.ts` owns structure, which this change reverses. Say instead that the database owns the set and `lib/questions.ts` is the factory default and fallback.
 
@@ -1162,7 +1164,9 @@ The largest task, and the only one whose verification is manual. Split into thre
 
 - [ ] **Step 1: Rewrite the page shell**
 
-`app/admin/questions/page.tsx` keeps `export const dynamic = "force-dynamic"`, calls `seedDraftQuestions()` and `getPublishedQuestions()`, and renders `<QuestionSetEditor initialQuestions={...} initialUpdatedAt={...} publishedVersion={...} />`.
+`app/admin/questions/page.tsx` keeps `export const dynamic = "force-dynamic"`, calls `seedDraftQuestions()` and `getPublishedQuestions()`, and renders `<QuestionSetEditor initialQuestions={...} initialUpdatedAt={...} publishedVersion={...} />`. `seedDraftQuestions()` returns `{ questions, updatedAt }`, which supplies the first two props directly.
+
+Also delete the `getResolvedQuestions` alias from `lib/questionContent.ts` — this page was its last caller. Confirm with `grep -rn "getResolvedQuestions" app lib components` before removing, and expect no hits afterwards.
 
 Replace the page's standfirst, which currently promises that structure cannot change:
 
