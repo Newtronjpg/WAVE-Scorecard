@@ -1,0 +1,211 @@
+import { describe, it, expect } from "vitest";
+import {
+  validateQuestionSet,
+  withDerivedTiers,
+  toStored,
+  nextQuestionId,
+  factoryQuestionSet,
+  MAX_LEVELS,
+  type StoredQuestion,
+} from "@/lib/questionSet";
+import { QUESTIONS } from "@/lib/questions";
+
+// One module gates every path into the stored question set: the draft
+// save, the publish, and the runtime read. A set that fails here must
+// never reach a prospect, and a set that passes here must be safe to
+// score without further checking.
+
+function question(
+  id: string,
+  gap: StoredQuestion["gap"],
+  choiceCount = 5
+): StoredQuestion {
+  return {
+    id,
+    gap,
+    statement: `${id} statement`,
+    levels: Array.from({ length: choiceCount }, (_, i) => ({
+      value: i + 1,
+      label: `${id} label ${i + 1}`,
+      description: `${id} description ${i + 1}`,
+    })),
+  };
+}
+
+// The smallest set that satisfies "every gap has at least one question".
+function validSet(): StoredQuestion[] {
+  return [
+    question("W1", "wealth"),
+    question("A1", "accounting"),
+    question("V1", "value"),
+    question("E1", "earnings"),
+  ];
+}
+
+describe("validateQuestionSet accepts", () => {
+  it("a minimal set with one question per gap", () => {
+    const result = validateQuestionSet(validSet());
+    expect(result.ok).toBe(true);
+  });
+
+  it("the factory question set", () => {
+    // If the shipped defaults cannot pass their own validator, the
+    // fallback path is broken and every other guarantee is worthless.
+    const result = validateQuestionSet(factoryQuestionSet());
+    expect(result.ok).toBe(true);
+  });
+
+  it("mixed choice counts across questions", () => {
+    const set = validSet();
+    set[0] = question("W1", "wealth", 3);
+    set[1] = question("A1", "accounting", 7);
+    expect(validateQuestionSet(set).ok).toBe(true);
+  });
+
+  it("a two-choice question, which is allowed but discouraged", () => {
+    const set = validSet();
+    set[0] = question("W1", "wealth", 2);
+    expect(validateQuestionSet(set).ok).toBe(true);
+  });
+
+  it("trims surrounding whitespace from text", () => {
+    const set = validSet();
+    set[0].statement = "  padded  ";
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.questions[0].statement).toBe("padded");
+  });
+});
+
+describe("validateQuestionSet rejects", () => {
+  it("a value that is not an array", () => {
+    expect(validateQuestionSet({ nope: true }).ok).toBe(false);
+  });
+
+  it("a gap with no questions", () => {
+    const set = validSet().filter((q) => q.gap !== "wealth");
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toMatch(/wealth/i);
+  });
+
+  it("duplicate question ids", () => {
+    const set = [...validSet(), question("W1", "wealth")];
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toMatch(/W1/);
+  });
+
+  it("an id with characters that would break an Excel header or JSON key", () => {
+    const set = validSet();
+    set[0].id = "W 1!";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("fewer than two choices", () => {
+    const set = validSet();
+    set[0] = question("W1", "wealth", 1);
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("more than the maximum choices", () => {
+    const set = validSet();
+    set[0] = question("W1", "wealth", MAX_LEVELS + 1);
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("level values that are not contiguous from 1", () => {
+    const set = validSet();
+    set[0].levels = [
+      { value: 1, label: "a", description: "a" },
+      { value: 3, label: "b", description: "b" },
+    ];
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("an empty statement", () => {
+    const set = validSet();
+    set[0].statement = "   ";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("an empty choice label", () => {
+    const set = validSet();
+    set[0].levels[2].label = "";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("an unknown gap", () => {
+    const set = validSet();
+    (set[0] as { gap: string }).gap = "marketing";
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("a statement past the length cap", () => {
+    const set = validSet();
+    set[0].statement = "x".repeat(401);
+    expect(validateQuestionSet(set).ok).toBe(false);
+  });
+
+  it("reports every problem at once rather than only the first", () => {
+    const set = validSet();
+    set[0].statement = "";
+    set[1].statement = "";
+    const result = validateQuestionSet(set);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not mutate the input it was given", () => {
+    const set = validSet();
+    const before = JSON.parse(JSON.stringify(set));
+    validateQuestionSet(set);
+    expect(set).toEqual(before);
+  });
+});
+
+describe("withDerivedTiers", () => {
+  it("attaches a tier to every level", () => {
+    const [q] = withDerivedTiers([question("W1", "wealth", 5)]);
+    expect(q.levels.map((l) => l.tier)).toEqual([
+      "Poor",
+      "Fair",
+      "Good",
+      "Excellent",
+      "Excellent",
+    ]);
+  });
+
+  it("derives tiers correctly for a three-choice question", () => {
+    const [q] = withDerivedTiers([question("W1", "wealth", 3)]);
+    expect(q.levels.map((l) => l.tier)).toEqual(["Poor", "Good", "Excellent"]);
+  });
+});
+
+describe("toStored", () => {
+  it("drops the tier, which is derived rather than stored", () => {
+    const stored = toStored(QUESTIONS);
+    expect(stored[0].levels[0]).not.toHaveProperty("tier");
+  });
+
+  it("round-trips the factory set through validation", () => {
+    expect(validateQuestionSet(toStored(QUESTIONS)).ok).toBe(true);
+  });
+});
+
+describe("nextQuestionId", () => {
+  it("uses the gap's letter and the next free number", () => {
+    expect(nextQuestionId(validSet(), "wealth")).toBe("W2");
+  });
+
+  it("does not reuse an id that already exists in another gap", () => {
+    const set = [...validSet(), question("W2", "value")];
+    expect(nextQuestionId(set, "wealth")).toBe("W3");
+  });
+
+  it("gives each gap its own letter", () => {
+    expect(nextQuestionId(validSet(), "accounting")).toBe("A2");
+    expect(nextQuestionId(validSet(), "value")).toBe("V2");
+    expect(nextQuestionId(validSet(), "earnings")).toBe("E2");
+  });
+});
