@@ -20,7 +20,7 @@ export type Gap = "wealth" | "accounting" | "value" | "earnings";
 export type Tier = "Poor" | "Fair" | "Good" | "Excellent";
 
 export interface RatingLevel {
-  value: 1 | 2 | 3 | 4 | 5;
+  value: number; // 1..levels.length, contiguous
   tier: Tier;
   label: string;
   description: string;

@@ -19,7 +19,7 @@
 // the /api/submit route, the results page, and the Excel export without
 // three different copies of the math ever drifting apart.
 
-import { GAPS, QUESTIONS, type Gap } from "./questions";
+import { GAPS, QUESTIONS, type Gap, type Question, type Tier } from "./questions";
 
 export type AnswerMap = Record<string, number>;
 
@@ -76,11 +76,29 @@ export const READINESS_BANDS: ReadinessBand[] = [
   },
 ];
 
-export function normalizeAnswer(rating: number): number {
-  if (rating < 1 || rating > 5) {
-    throw new Error(`Rating must be between 1 and 5, got ${rating}`);
+// The denominator is the choice count minus one, not the constant 4.
+// It defaults to 5 so the original single-argument call still works and
+// produces identical numbers -- that equivalence is what keeps the pinned
+// worked example in tests/scoring.test.ts valid across this change.
+export function normalizeAnswer(rating: number, choiceCount: number = 5): number {
+  if (choiceCount < 2) {
+    throw new Error(`A question needs at least 2 choices, got ${choiceCount}`);
   }
-  return ((rating - 1) / 4) * 100;
+  if (rating < 1 || rating > choiceCount) {
+    throw new Error(`Rating must be between 1 and ${choiceCount}, got ${rating}`);
+  }
+  return ((rating - 1) / (choiceCount - 1)) * 100;
+}
+
+// Tier now derives from the normalized position, not the raw rating, so it
+// means the same thing whatever the choice count. At five choices this
+// reproduces the original 1=Poor 2=Fair 3=Good 4-5=Excellent map exactly.
+export function tierForLevel(value: number, choiceCount: number): Tier {
+  const normalized = normalizeAnswer(value, choiceCount);
+  if (normalized < 25) return "Poor";
+  if (normalized < 50) return "Fair";
+  if (normalized < 75) return "Good";
+  return "Excellent";
 }
 
 export function bandFor(score: number): ReadinessBand {
@@ -93,8 +111,8 @@ export function bandFor(score: number): ReadinessBand {
   return match;
 }
 
-function assertComplete(answers: AnswerMap): void {
-  const missing = QUESTIONS.filter((q) => answers[q.id] === undefined);
+function assertComplete(answers: AnswerMap, questions: Question[]): void {
+  const missing = questions.filter((q) => answers[q.id] === undefined);
   if (missing.length > 0) {
     throw new Error(
       `Missing answers for: ${missing.map((q) => q.id).join(", ")}`
@@ -102,13 +120,23 @@ function assertComplete(answers: AnswerMap): void {
   }
 }
 
-export function scoreAssessment(answers: AnswerMap): ScoreResult {
-  assertComplete(answers);
+export function scoreAssessment(
+  answers: AnswerMap,
+  questions: Question[] = QUESTIONS
+): ScoreResult {
+  assertComplete(answers, questions);
 
   const gapResults: GapResult[] = GAPS.map((gapMeta) => {
-    const gapQuestions = QUESTIONS.filter((q) => q.gap === gapMeta.id);
+    const gapQuestions = questions.filter((q) => q.gap === gapMeta.id);
+    if (gapQuestions.length === 0) {
+      // Previously this divided by zero and produced NaN, which would then
+      // be written into an Int column. Fail loudly instead.
+      throw new Error(
+        `The ${gapMeta.id} gap has no questions; every gap needs at least one.`
+      );
+    }
     const normalizedScores = gapQuestions.map((q) =>
-      normalizeAnswer(answers[q.id])
+      normalizeAnswer(answers[q.id], q.levels.length)
     );
     const rawAverage =
       normalizedScores.reduce((sum, n) => sum + n, 0) / normalizedScores.length;
@@ -141,6 +169,11 @@ export function scoreAssessment(answers: AnswerMap): ScoreResult {
 // Library and Combo Rules ("W1 is Good/Excellent AND W3 is Poor/Fair"). Keeping
 // this in one function means the rubric UI, the results page, and any
 // future rules engine all agree on what "Poor" means for a given answer.
+/**
+ * @deprecated Five-choice questions only. It takes no choice count, so it
+ * cannot describe a 3- or 7-choice question. Use tierForLevel(value, count).
+ * Retained because tests/scoring.test.ts pins it as a regression gate.
+ */
 export function tierForRating(rating: number): "Poor" | "Fair" | "Good" | "Excellent" {
   if (rating <= 1) return "Poor";
   if (rating === 2) return "Fair";
