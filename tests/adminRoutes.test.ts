@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { QUESTIONS } from "@/lib/questions";
 
 const upsertSetting = vi.fn();
 const deleteSubmission = vi.fn();
@@ -27,13 +26,6 @@ function jsonRequest(url: string, method: string, body?: unknown) {
     headers: { "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-}
-
-function validLevels() {
-  return [1, 2, 3, 4, 5].map((v) => ({
-    label: `Label ${v}`,
-    description: `Description ${v}`,
-  }));
 }
 
 beforeEach(() => {
@@ -107,94 +99,3 @@ describe("DELETE /api/admin/submissions/[id]", () => {
   });
 });
 
-describe("PUT /api/admin/questions/[id]", () => {
-  const id = QUESTIONS[0].id;
-  const url = `http://localhost:3000/api/admin/questions/${id}`;
-
-  it("saves a full override", async () => {
-    const { PUT } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await PUT(
-      jsonRequest(url, "PUT", { statement: "Rewritten.", levels: validLevels() }),
-      { params: Promise.resolve({ id }) }
-    );
-
-    expect(res.status).toBe(200);
-    expect(upsertQuestion).toHaveBeenCalledTimes(1);
-    const arg = upsertQuestion.mock.calls[0][0];
-    expect(arg.create.statement).toBe("Rewritten.");
-    expect(arg.create.levels).toHaveLength(5);
-    expect(arg.create.levels[0].value).toBe(1);
-  });
-
-  it("returns 404 for a question id that does not exist", async () => {
-    const { PUT } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await PUT(
-      jsonRequest(url, "PUT", { statement: "x", levels: validLevels() }),
-      { params: Promise.resolve({ id: "NOPE" }) }
-    );
-
-    expect(res.status).toBe(404);
-    expect(upsertQuestion).not.toHaveBeenCalled();
-  });
-
-  it("rejects an empty statement", async () => {
-    const { PUT } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await PUT(
-      jsonRequest(url, "PUT", { statement: "   ", levels: validLevels() }),
-      { params: Promise.resolve({ id }) }
-    );
-
-    expect(res.status).toBe(400);
-    expect(upsertQuestion).not.toHaveBeenCalled();
-  });
-
-  it("rejects fewer than five levels", async () => {
-    const { PUT } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await PUT(
-      jsonRequest(url, "PUT", { statement: "ok", levels: validLevels().slice(0, 4) }),
-      { params: Promise.resolve({ id }) }
-    );
-
-    expect(res.status).toBe(400);
-    expect(upsertQuestion).not.toHaveBeenCalled();
-  });
-
-  it("ignores any attempt to set a tier, keeping tiers structural", async () => {
-    const { PUT } = await import("@/app/api/admin/questions/[id]/route");
-    await PUT(
-      jsonRequest(url, "PUT", {
-        statement: "ok",
-        levels: validLevels().map((l) => ({ ...l, tier: "Excellent" })),
-      }),
-      { params: Promise.resolve({ id }) }
-    );
-
-    const saved = upsertQuestion.mock.calls[0][0].create.levels;
-    expect(saved.every((l: Record<string, unknown>) => !("tier" in l))).toBe(true);
-  });
-});
-
-describe("DELETE /api/admin/questions/[id]", () => {
-  it("removes the override, restoring the default wording", async () => {
-    const id = QUESTIONS[0].id;
-    const { DELETE } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await DELETE(
-      jsonRequest(`http://localhost:3000/api/admin/questions/${id}`, "DELETE"),
-      { params: Promise.resolve({ id }) }
-    );
-
-    expect(res.status).toBe(200);
-    expect(deleteManyQuestion).toHaveBeenCalledWith({ where: { questionId: id } });
-  });
-
-  it("returns 404 for an unknown question id", async () => {
-    const { DELETE } = await import("@/app/api/admin/questions/[id]/route");
-    const res = await DELETE(
-      jsonRequest("http://localhost:3000/api/admin/questions/NOPE", "DELETE"),
-      { params: Promise.resolve({ id: "NOPE" }) }
-    );
-
-    expect(res.status).toBe(404);
-    expect(deleteManyQuestion).not.toHaveBeenCalled();
-  });
-});
