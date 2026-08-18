@@ -51,6 +51,18 @@ model Submission {
   // factory default, including every run taken before versioning existed.
   questionSetVersion Int?
 
+  // The LITERAL question set (id, gap, statement, levels, tiers) the
+  // respondent was scored against, stored on the row itself -- see
+  // lib/questionSet.ts's StoredQuestion/toStored. This makes every
+  // submission self-describing: no join back to QuestionSetVersion is
+  // ever required to know what was asked, and a null questionSetVersion
+  // (the factory default) is no longer ambiguous, because the actual
+  // content travels with the row regardless of whether that version
+  // could later be resolved. Null on old rows written before this
+  // column existed is honest -- we don't know what they saw and don't
+  // backfill a guess.
+  questionSetSnapshot Json?
+
   @@map("submissions")
 }
 

@@ -32,7 +32,15 @@ export function RatingSelector({
       <div
         role="radiogroup"
         aria-label={question.statement}
-        className="grid grid-cols-5 gap-2"
+        className="grid gap-2"
+        style={{
+          // Tailwind's grid-cols-N classes are generated at build time, so
+          // an interpolated class name (grid-cols-${n}) would be purged
+          // and silently produce no columns. This question's choice count
+          // is no longer fixed at 5, so the column count has to be set
+          // inline instead.
+          gridTemplateColumns: `repeat(${question.levels.length}, minmax(0, 1fr))`,
+        }}
       >
         {question.levels.map((level) => {
           const selected = value === level.value;

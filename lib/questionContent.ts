@@ -24,8 +24,9 @@ import {
 //
 // The fallback chain is the safety-critical part of this file, but it
 // only covers the READ paths (resolveQuestions, getPublishedQuestions,
-// getDraftQuestions, getResolvedQuestions): a missing table, a read
-// error, or an invalid stored set must all degrade to the factory
+// getQuestionsForVersion, getDraftQuestions, getResolvedQuestions): a
+// missing table, a read error, or an invalid stored set must all degrade
+// to the factory
 // questions (optionally with lingering QuestionOverride wording layered
 // on, see getPublishedQuestions) rather than breaking the assessment for
 // every prospect. That is not theoretical -- a missing table caused a
@@ -179,6 +180,50 @@ export async function getPublishedQuestions(): Promise<{
   } catch (e) {
     console.error("Failed to read the published question set, using the factory defaults:", e);
     return { questions: await factoryWithOverrides(), version: null };
+  }
+}
+
+// Resolves the EXACT question set a specific published version
+// represented -- independent of whatever getPublishedQuestions would
+// report right now. /api/submit uses this instead of getPublishedQuestions
+// when a version traveled with the request, so a submission is always
+// scored against what the respondent actually loaded, not whatever
+// happens to be live if a publish landed mid-assessment.
+//
+// version === null describes only the "nothing has ever been published"
+// state a prospect could have loaded before the very first publish.
+// factoryWithOverrides() is safe to recompute later for that case because
+// nothing writes to QuestionOverride any more (that write path was
+// retired by the versioned editor, see the file header above) -- it is
+// frozen, deterministic input, so calling it again reproduces
+// byte-for-byte what was served at load time even if a publish has
+// happened since.
+//
+// Returns null (never throws) when the version cannot be resolved: no
+// such row, a row that fails validation, or a read error. The caller must
+// treat that as "this run can no longer be trusted to score against what
+// the respondent saw" rather than silently falling back to a different
+// question set.
+export async function getQuestionsForVersion(
+  version: number | null
+): Promise<Question[] | null> {
+  if (version === null) {
+    return factoryWithOverrides();
+  }
+
+  try {
+    const row = await db.questionSetVersion.findUnique({ where: { version } });
+    if (!row) return null;
+
+    const questions = resolveQuestions(row.questions);
+    if (!questions) {
+      console.error(`Question set version ${version} failed validation.`);
+      return null;
+    }
+    return questions;
+  } catch (e) {
+    console.error(`Failed to read question set version ${version}:`, e);
+    return null;
   }
 }
 

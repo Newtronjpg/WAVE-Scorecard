@@ -6,6 +6,7 @@ import {
   getDraftQuestions,
   seedDraftQuestions,
   getResolvedQuestions,
+  getQuestionsForVersion,
 } from "@/lib/questionContent";
 import { QUESTIONS } from "@/lib/questions";
 import { factoryQuestionSet } from "@/lib/questionSet";
@@ -193,6 +194,7 @@ describe("resolveQuestions", () => {
 // exercised the crash path instead of the path it names (see the same
 // hazard called out in tests/submitRoute.test.ts).
 const findFirstVersionMock = vi.fn();
+const findUniqueVersionMock = vi.fn();
 const findUniqueDraftMock = vi.fn();
 const upsertDraftMock = vi.fn();
 const findManyOverrideMock = vi.fn();
@@ -201,6 +203,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     questionSetVersion: {
       findFirst: (...args: unknown[]) => findFirstVersionMock(...args),
+      findUnique: (...args: unknown[]) => findUniqueVersionMock(...args),
     },
     questionDraft: {
       findUnique: (...args: unknown[]) => findUniqueDraftMock(...args),
@@ -313,6 +316,84 @@ describe("getPublishedQuestions", () => {
 
     expect(result.version).toBeNull();
     expect(result.questions).toEqual(QUESTIONS);
+  });
+});
+
+// getQuestionsForVersion resolves the EXACT question set a specific
+// published version represented, independent of whatever is live right
+// now -- this is what lets /api/submit score a run against the version
+// the respondent actually loaded rather than whatever a concurrent
+// publish made current by the time they hit submit.
+//
+// version === null describes only the "nothing has ever been published"
+// state a prospect could have loaded pre-first-publish. Recomputing
+// factoryWithOverrides() later reproduces that state byte-for-byte
+// because nothing writes to QuestionOverride any more (that write path
+// was retired by the versioned editor) -- it is frozen, deterministic
+// input, unaffected by any publish that happens afterward.
+describe("getQuestionsForVersion", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  beforeEach(() => {
+    findUniqueVersionMock.mockReset();
+    findManyOverrideMock.mockReset().mockResolvedValue([]);
+    consoleErrorSpy.mockClear();
+  });
+
+  it("returns the factory-with-overrides set when version is null, without touching QuestionSetVersion", async () => {
+    findManyOverrideMock.mockResolvedValue([
+      { questionId: first.id, statement: "Carried forward.", levels: null },
+    ]);
+
+    const result = await getQuestionsForVersion(null);
+
+    expect(result?.[0].statement).toBe("Carried forward.");
+    expect(findUniqueVersionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the exact historical snapshot for a specific version by primary-key lookup", async () => {
+    findUniqueVersionMock.mockResolvedValue({
+      version: 3,
+      questions: factoryQuestionSet(),
+      note: null,
+      publishedAt: new Date(),
+    });
+
+    const result = await getQuestionsForVersion(3);
+
+    expect(findUniqueVersionMock).toHaveBeenCalledWith({ where: { version: 3 } });
+    expect(result).toEqual(QUESTIONS);
+  });
+
+  it("returns null when the requested version does not exist", async () => {
+    findUniqueVersionMock.mockResolvedValue(null);
+
+    const result = await getQuestionsForVersion(99);
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null and logs when the stored version fails validation", async () => {
+    findUniqueVersionMock.mockResolvedValue({
+      version: 2,
+      questions: [{ id: "W1", gap: "wealth" }],
+      note: null,
+      publishedAt: new Date(),
+    });
+
+    const result = await getQuestionsForVersion(2);
+
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("returns null and logs when the read rejects", async () => {
+    findUniqueVersionMock.mockRejectedValue(new Error("question_set_versions unreachable"));
+
+    const result = await getQuestionsForVersion(4);
+
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 });
 

@@ -29,10 +29,21 @@ const WIDEST_GAP_ADVICE: Record<Gap, string> = {
     "get a real read on how your margins compare to your industry, and start tracking the handful of numbers that actually explain the gap. It's hard to fix what hasn't been measured.",
 };
 
-// Questions arrive as a prop, resolved server-side, so admin wording
-// edits show up here without a redeploy. Structure still comes from
-// lib/questions.ts; only the text can differ from the defaults.
-export function Assessment({ questions }: { questions: Question[] }) {
+// Questions arrive as a prop, resolved server-side, so admin edits show
+// up here without a redeploy. `version` is the published version that
+// produced this exact `questions` array (see app/page.tsx) -- it is
+// carried through submit untouched by anything that happens after this
+// component mounts, so a publish landing mid-assessment cannot change
+// what a submission gets scored and stamped against. Never re-derive it
+// from something that could drift (e.g. an id on a later-fetched
+// question); it must stay the value this component was handed at load.
+export function Assessment({
+  questions,
+  version,
+}: {
+  questions: Question[];
+  version: number | null;
+}) {
   const [view, setView] = useState<View>("intro");
   const [sectionIndex, setSectionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -78,6 +89,10 @@ export function Assessment({ questions }: { questions: Question[] }) {
           answers,
           prospectName: prospectName.trim(),
           companyName: companyName.trim(),
+          // The version loaded at the top of this component, not
+          // whatever might be published by now -- see the prop comment
+          // above and app/api/submit/route.ts for why.
+          questionSetVersion: version,
         }),
       });
       if (!res.ok) {
@@ -127,6 +142,7 @@ export function Assessment({ questions }: { questions: Question[] }) {
       <IntroView
         prospectName={prospectName}
         companyName={companyName}
+        questionCount={questions.length}
         onProspectNameChange={setProspectName}
         onCompanyNameChange={setCompanyName}
         onStart={() => setView("section")}

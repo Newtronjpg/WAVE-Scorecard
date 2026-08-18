@@ -176,7 +176,12 @@ export interface PersistenceFailureDetails {
   companyName: string;
   recipients?: string[];
   answers: Record<string, number>;
-  result: ScoreResult;
+  // Optional: absent when there is no score to report, e.g. the
+  // question-set version this run answered could not be resolved at all
+  // (app/api/submit/route.ts), so scoreAssessment was never called.
+  // sendSubmissionNotification is untouched by this -- a routine
+  // notification always has a real result.
+  result?: ScoreResult;
   adminUrl: string;
   error: unknown;
 }
@@ -201,13 +206,38 @@ export function buildPersistenceFailureAlert(details: PersistenceFailureDetails)
     .map(([id, rating]) => `  ${id}=${rating}`)
     .join("\n");
 
-  const gapLines = result.gaps.map((g) => `  ${g.name}: ${g.score}/100`).join("\n");
+  // `result` is absent when nothing was ever scored -- e.g. the
+  // question-set version this run answered could not be resolved at
+  // all, so scoreAssessment was never called. Rendering a score in that
+  // case would mean fabricating one; say plainly that none exists
+  // instead.
+  const scoreSection = result
+    ? `Overall: ${result.overallScore}/100 (${result.band.label})
+${result.gaps.map((g) => `  ${g.name}: ${g.score}/100`).join("\n")}
+Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)`
+    : `Score: not available (the question set for this submission's version could not be resolved)`;
+
+  // This prose was originally written for one failure mode only --
+  // db.submission.create throwing after scoring already succeeded, where
+  // the respondent's browser genuinely shows a normal results screen and
+  // they have no idea anything failed. Reused verbatim for the other
+  // failure mode (the question-set version itself could not be resolved,
+  // `result` absent) it was actively wrong: that respondent DID see an
+  // error and was told to try again, and a resolution failure is far
+  // more likely to be a one-off blip than an ongoing outage. Staff
+  // reading the wrong version of this either miss the one prospect who
+  // is genuinely stuck, or write off a transient hiccup as a full outage.
+  const respondentAwareness = result
+    ? "They were shown their results as normal and do not know anything went wrong."
+    : "They saw an error and were told their answers were not lost and to try again -- they may not know whether a retry has since succeeded.";
+  const outageWarning = result
+    ? "The form is still collecting submissions and still losing them. Until\nthis is fixed, every further assessment is lost the same way."
+    : "This can be a one-off blip (a slow read, a cold start) rather than an\nongoing problem -- but if this keeps happening, the question-set store\nitself needs attention.";
 
   return {
     subject: `ACTION NEEDED, submission NOT SAVED: ${prospectName} (${companyName})`,
     text: `A prospect completed the WAVE Scorecard, but it could NOT be saved to
-the database. They were shown their results as normal and do not know
-anything went wrong.
+the database. ${respondentAwareness}
 
 THIS EMAIL IS THE ONLY COPY OF THIS SUBMISSION. It is not in the admin
 table and it will not appear in the Excel export. Save it somewhere
@@ -217,9 +247,7 @@ Prospect: ${prospectName}
 Company:  ${companyName}
 When:     ${new Date().toISOString()}
 
-Overall: ${result.overallScore}/100 (${result.band.label})
-${gapLines}
-Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
+${scoreSection}
 
 Raw answers (question id = rating 1-5):
 ${answerLines}
@@ -227,8 +255,7 @@ ${answerLines}
 Why it failed:
   ${reason}
 
-The form is still collecting submissions and still losing them. Until
-this is fixed, every further assessment is lost the same way.
+${outageWarning}
 
 Admin: ${adminUrl}`,
   };
