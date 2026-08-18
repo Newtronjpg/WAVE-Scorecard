@@ -1,7 +1,5 @@
 # Editable Question Sets Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Let an admin add and delete assessment questions, give each question its own number of answer choices, and preview and score-test the result before publishing it to the live site.
 
 **Architecture:** The database takes over ownership of the question set from `lib/questions.ts`, which becomes the factory default and the fallback. A single mutable draft row is edited freely; publishing appends an immutable numbered snapshot, and the highest version is live. The scoring formula's hardcoded `/4` becomes `/(choiceCount - 1)`, which is arithmetically identical for five-choice questions and therefore leaves the pinned worked example intact.
