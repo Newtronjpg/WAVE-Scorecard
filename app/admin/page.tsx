@@ -119,6 +119,12 @@ export default async function AdminPage() {
                 <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>
                 <td className="px-3 py-2 text-ink-muted">{s.readinessBand}</td>
                 <td className="px-3 py-2 text-right">
+                  <a
+                    href={`/api/admin/submissions/${s.id}/export`}
+                    className="mr-3 text-sm text-maroon hover:underline"
+                  >
+                    Export
+                  </a>
                   <DeleteSubmissionButton
                     id={s.id}
                     label={`${s.prospectName ?? "this submission"}`}
@@ -139,7 +145,9 @@ export default async function AdminPage() {
       </div>
 
       <p className="mt-4 text-xs text-ink-muted">
-        Raw answers for every question are in the Excel export, not in this table.
+        The Excel download above lists scores only. For one run&rsquo;s full
+        answers, with the questions exactly as they were asked at the time, use
+        Export on that row.
       </p>
     </div>
   );
