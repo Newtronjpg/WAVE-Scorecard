@@ -19,6 +19,7 @@ const findFirstVersionMock = vi.fn();
 const findUniqueVersionMock = vi.fn();
 const findManyVersionMock = vi.fn();
 const createVersionMock = vi.fn();
+const deleteVersionMock = vi.fn();
 const findManyOverrideMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
@@ -32,6 +33,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: (...args: unknown[]) => findUniqueVersionMock(...args),
       findMany: (...args: unknown[]) => findManyVersionMock(...args),
       create: (...args: unknown[]) => createVersionMock(...args),
+      delete: (...args: unknown[]) => deleteVersionMock(...args),
     },
     questionOverride: {
       findMany: (...args: unknown[]) => findManyOverrideMock(...args),
@@ -60,6 +62,7 @@ beforeEach(() => {
   findUniqueVersionMock.mockReset().mockResolvedValue(null);
   findManyVersionMock.mockReset().mockResolvedValue([]);
   createVersionMock.mockReset().mockResolvedValue({});
+  deleteVersionMock.mockReset().mockResolvedValue({});
   findManyOverrideMock.mockReset().mockResolvedValue([]);
 });
 
@@ -498,6 +501,70 @@ describe("GET /api/admin/questions/versions", () => {
 
     expect(res.status).toBe(500);
     expect(typeof json.error).toBe("string");
+  });
+});
+
+describe("DELETE /api/admin/questions/versions/[version]", () => {
+  function params(version: string) {
+    return Promise.resolve({ version });
+  }
+
+  it("deletes a version that is not the live one", async () => {
+    findFirstVersionMock.mockResolvedValue({ version: 5 });
+    const { DELETE } = await import(
+      "@/app/api/admin/questions/versions/[version]/route"
+    );
+    const res = await DELETE({} as never, { params: params("3") });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(deleteVersionMock).toHaveBeenCalledWith({ where: { version: 3 } });
+  });
+
+  it("refuses to delete the currently live version, and writes nothing", async () => {
+    findFirstVersionMock.mockResolvedValue({ version: 5 });
+    const { DELETE } = await import(
+      "@/app/api/admin/questions/versions/[version]/route"
+    );
+    const res = await DELETE({} as never, { params: params("5") });
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(typeof json.error).toBe("string");
+    expect(deleteVersionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404, not 500, when the version does not exist", async () => {
+    findFirstVersionMock.mockResolvedValue({ version: 5 });
+    deleteVersionMock.mockRejectedValue({ code: "P2025" });
+    const { DELETE } = await import(
+      "@/app/api/admin/questions/versions/[version]/route"
+    );
+    const res = await DELETE({} as never, { params: params("99") });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for a non-numeric version", async () => {
+    const { DELETE } = await import(
+      "@/app/api/admin/questions/versions/[version]/route"
+    );
+    const res = await DELETE({} as never, { params: params("not-a-number") });
+
+    expect(res.status).toBe(400);
+    expect(deleteVersionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 on an unexpected failure", async () => {
+    findFirstVersionMock.mockResolvedValue({ version: 5 });
+    deleteVersionMock.mockRejectedValue(new Error("db unreachable"));
+    const { DELETE } = await import(
+      "@/app/api/admin/questions/versions/[version]/route"
+    );
+    const res = await DELETE({} as never, { params: params("3") });
+
+    expect(res.status).toBe(500);
   });
 });
 

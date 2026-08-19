@@ -41,6 +41,10 @@ export function VersionHistory({
   const [rollingBackVersion, setRollingBackVersion] = useState<number | null>(
     null
   );
+  const [deleteArmedVersion, setDeleteArmedVersion] = useState<number | null>(
+    null
+  );
+  const [deletingVersion, setDeletingVersion] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -116,6 +120,44 @@ export function VersionHistory({
     }
   }
 
+  function handleDeleteClick(version: number) {
+    if (deleteArmedVersion !== version) {
+      setDeleteArmedVersion(version);
+      setTimeout(() => {
+        setDeleteArmedVersion((current) => (current === version ? null : current));
+      }, 4000);
+      return;
+    }
+    setDeleteArmedVersion(null);
+    confirmDelete(version);
+  }
+
+  async function confirmDelete(version: number) {
+    setDeletingVersion(version);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/questions/versions/${version}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Could not delete. Please try again.");
+        return;
+      }
+
+      // No content to merge -- just drop it from the list locally rather
+      // than re-fetching, since nothing else about the remaining rows
+      // changed.
+      setVersions((current) => current.filter((v) => v.version !== version));
+    } catch (e) {
+      console.error("confirmDelete failed:", e);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setDeletingVersion(null);
+    }
+  }
+
   return (
     <div className="mt-6 rounded-md border border-line p-4">
       <button
@@ -128,7 +170,11 @@ export function VersionHistory({
       <p className="mt-1 text-xs text-ink-muted">
         A bad publish is one click to undo -- roll back to any earlier
         version below. This appends a new version carrying that one&rsquo;s
-        content forward; it does not delete anything from history.
+        content forward; it does not delete anything from history. Delete
+        removes a version outright -- for one that was never meant to exist,
+        not for undoing a real publish. Past submissions are unaffected
+        either way; each keeps its own copy of exactly what it was scored
+        against.
       </p>
 
       {open && (
@@ -154,6 +200,9 @@ export function VersionHistory({
                 const armed = armedVersion === v.version;
                 const busy = rollingBackVersion === v.version;
                 const anyRollingBack = rollingBackVersion !== null;
+                const deleteArmed = deleteArmedVersion === v.version;
+                const deleting = deletingVersion === v.version;
+                const anyDeleting = deletingVersion !== null;
 
                 return (
                   <li
@@ -176,27 +225,46 @@ export function VersionHistory({
                     </div>
 
                     {!isLive && (
-                      <button
-                        type="button"
-                        onClick={() => handleRollbackClick(v.version)}
-                        disabled={anyRollingBack}
-                        aria-label={
-                          armed
-                            ? `Confirm rolling back to version ${v.version}`
-                            : `Roll back to version ${v.version}`
-                        }
-                        className={
-                          armed
-                            ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                            : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                        }
-                      >
-                        {busy
-                          ? "Rolling back…"
-                          : armed
-                            ? "Confirm?"
-                            : "Roll back to this version"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRollbackClick(v.version)}
+                          disabled={anyRollingBack || anyDeleting}
+                          aria-label={
+                            armed
+                              ? `Confirm rolling back to version ${v.version}`
+                              : `Roll back to version ${v.version}`
+                          }
+                          className={
+                            armed
+                              ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                              : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          }
+                        >
+                          {busy
+                            ? "Rolling back…"
+                            : armed
+                              ? "Confirm?"
+                              : "Roll back to this version"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(v.version)}
+                          disabled={anyRollingBack || anyDeleting}
+                          aria-label={
+                            deleteArmed
+                              ? `Confirm deleting version ${v.version}`
+                              : `Delete version ${v.version}`
+                          }
+                          className={
+                            deleteArmed
+                              ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                              : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          }
+                        >
+                          {deleting ? "Deleting…" : deleteArmed ? "Confirm?" : "Delete"}
+                        </button>
+                      </div>
                     )}
                   </li>
                 );
