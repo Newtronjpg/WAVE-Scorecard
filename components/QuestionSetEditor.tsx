@@ -423,7 +423,7 @@ export function QuestionSetEditor({
               disabled={busy}
               className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
-              Reset to factory
+              Reset to original 5-choice defaults
             </button>
           )}
 
@@ -476,10 +476,14 @@ export function QuestionSetEditor({
         {resetArmed && (
           <div className="mt-3 rounded-md border border-maroon p-3">
             <p className="text-sm text-ink">
-              This throws away the current draft (including anything
-              unsaved) and replaces it with the shipped factory question
-              set. The live assessment is unaffected until you publish
-              again.
+              This is the ORIGINAL question set built into the code --
+              every question at 5 choices, none of your edits, not what
+              you&rsquo;ve been publishing. If you want your usual working
+              baseline back, cancel this and use &ldquo;Load what&rsquo;s
+              live into draft&rdquo; instead. This throws away the current
+              draft (including anything unsaved) and replaces it with
+              those original 5-choice defaults. The live assessment is
+              unaffected until you publish again.
             </p>
             <div className="mt-2 flex gap-2">
               <button
