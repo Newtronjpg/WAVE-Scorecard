@@ -1,114 +1,71 @@
-import { GAPS, type Gap } from "@/lib/questions";
+import { GAPS } from "@/lib/questions";
 import { normalizeAnswer } from "@/lib/scoring";
 import type { StoredQuestion } from "@/lib/questionSet";
 
-// A live, local scoring sanity check for the draft -- computed exactly the
-// way scoreAssessment computes a real submission (normalize per question,
-// round per gap, then round the overall average of the four gap scores),
-// so this panel can never disagree with what a real score would say. Lets
-// an admin catch a misconfigured question (a lopsided choice count, a
-// level added with the wrong effective position) before publishing,
-// without leaving the editor to run a full preview.
-//
-// No hooks, no interactivity -- purely derived from the `questions` prop
-// on every render, same as GapScoreBar.
+// An automatic sanity check on the draft's scoring math -- not a report an
+// admin has to read and interpret. Silent when everything checks out;
+// speaks up, by question id, only when it finds something a normal edit in
+// this editor can't produce (rating values that aren't 1..n in order, most
+// likely from a hand-edited row). validateQuestionSet still catches
+// structural problems like an empty gap on Publish; this is a narrower,
+// earlier check for the one class of error that wouldn't otherwise be
+// visible until a score came back wrong.
 
-type Pick = (question: StoredQuestion) => number;
+function findMisconfigured(questions: StoredQuestion[]): string[] {
+  const bad: string[] = [];
+  for (const q of questions) {
+    const values = q.levels.map((l) => l.value);
+    const expected = values.map((_, i) => i + 1);
+    const isContiguous = values.every((v, i) => v === expected[i]);
+    if (!isContiguous) bad.push(q.id);
+  }
+  return bad;
+}
 
-const lowestPick: Pick = () => 1;
-const highestPick: Pick = (q) => q.levels.length;
-// There is no exact middle choice when the count is even. Nearest integer
-// to the midpoint is close enough for a sanity check -- this row is never
-// claimed to be an achievable score, just a rough midpoint reference.
-const middlePick: Pick = (q) => Math.round((1 + q.levels.length) / 2);
-
-// Mirrors scoreAssessment's rounding exactly: round each gap average, then
-// round the average of the (already-rounded) gap scores. Returns null if
-// any gap currently has zero questions -- that is an invalid set
-// (scoreAssessment itself would throw), which can happen transiently while
-// editing, before the problem list catches it.
-function overallFor(questions: StoredQuestion[], pick: Pick): number | null {
-  const gapScores: number[] = [];
+// Backstop: with contiguous values this can never actually fire (rating 1
+// always normalizes to 0, rating n always normalizes to 100), but if it
+// somehow did, that's real enough to say something about even without a
+// specific question to name.
+function aggregateLooksWrong(questions: StoredQuestion[]): boolean {
   for (const gapMeta of GAPS) {
     const gapQuestions = questions.filter((q) => q.gap === gapMeta.id);
-    if (gapQuestions.length === 0) return null;
-    const norms = gapQuestions.map((q) =>
-      normalizeAnswer(pick(q), q.levels.length)
+    if (gapQuestions.length === 0) continue;
+    const lowest = gapQuestions.map((q) => normalizeAnswer(1, q.levels.length));
+    const highest = gapQuestions.map((q) =>
+      normalizeAnswer(q.levels.length, q.levels.length)
     );
-    const avg = norms.reduce((sum, n) => sum + n, 0) / norms.length;
-    gapScores.push(Math.round(avg));
+    if (lowest.some((n) => n !== 0) || highest.some((n) => n !== 100)) return true;
   }
-  return Math.round(gapScores.reduce((sum, n) => sum + n, 0) / gapScores.length);
+  return false;
 }
 
 export function ScoringCheck({ questions }: { questions: StoredQuestion[] }) {
-  const counts: Record<Gap, number> = {
-    wealth: 0,
-    accounting: 0,
-    value: 0,
-    earnings: 0,
-  };
-  for (const q of questions) {
-    counts[q.gap] += 1;
+  const misconfigured = findMisconfigured(questions);
+  if (misconfigured.length === 0 && !aggregateLooksWrong(questions)) {
+    return null;
   }
 
-  const lowest = overallFor(questions, lowestPick);
-  const middle = overallFor(questions, middlePick);
-  const highest = overallFor(questions, highestPick);
-
   return (
-    <div className="mt-6 rounded-md border border-line p-4">
-      <p className="text-xs font-medium tracking-wide uppercase text-ink-muted">
-        Scoring check
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-6 text-sm">
-        {GAPS.map((gapMeta) => (
-          <div key={gapMeta.id}>
-            <span className="block font-display text-lg text-maroon">
-              {counts[gapMeta.id]}
-            </span>
-            <span className="text-xs text-ink-muted">{gapMeta.name}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-6 text-sm">
-        <ScoreStat label="All lowest" value={lowest} expected={0} />
-        <ScoreStat label="All middle" value={middle} />
-        <ScoreStat label="All highest" value={highest} expected={100} />
-      </div>
-
-      <p className="mt-2 text-xs text-ink-muted">
-        Lowest should always be 0 and highest always 100. Anything else means
-        a question is misconfigured.
-      </p>
-    </div>
-  );
-}
-
-function ScoreStat({
-  label,
-  value,
-  expected,
-}: {
-  label: string;
-  value: number | null;
-  expected?: number;
-}) {
-  const mismatch = expected !== undefined && value !== null && value !== expected;
-  return (
-    <div>
-      <span
-        className={
-          mismatch
-            ? "block font-display text-lg text-red"
-            : "block font-display text-lg text-ink"
-        }
-      >
-        {value === null ? "—" : value}
-      </span>
-      <span className="text-xs text-ink-muted">{label}</span>
+    <div
+      role="alert"
+      className="mt-4 rounded-md border border-maroon bg-[var(--color-maroon)]/5 p-3 text-sm text-ink"
+    >
+      <p className="font-medium text-maroon">Scoring problem detected</p>
+      {misconfigured.length > 0 ? (
+        <p className="mt-1 text-ink-muted">
+          {misconfigured.join(", ")} {misconfigured.length === 1 ? "has" : "have"}{" "}
+          rating values out of order, so answers to{" "}
+          {misconfigured.length === 1 ? "it" : "them"} won&rsquo;t score
+          correctly. Remove and re-add a choice on{" "}
+          {misconfigured.length === 1 ? "that question" : "those questions"} to
+          fix it.
+        </p>
+      ) : (
+        <p className="mt-1 text-ink-muted">
+          The scoring math for this draft isn&rsquo;t coming out right. Check
+          each question&rsquo;s choices for anything unusual before publishing.
+        </p>
+      )}
     </div>
   );
 }

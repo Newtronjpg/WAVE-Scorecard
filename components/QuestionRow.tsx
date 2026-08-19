@@ -30,25 +30,29 @@ function renumbered(levels: StoredLevel[]): StoredLevel[] {
 
 export function QuestionRow({
   question,
-  canMoveUp,
-  canMoveDown,
   startOpen = false,
   onChange,
-  onMoveUp,
-  onMoveDown,
   onDelete,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDropOnto,
 }: {
   question: StoredQuestion;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   startOpen?: boolean;
   onChange: (next: StoredQuestion) => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onDelete: () => void;
+  // Reordering this question among its gap siblings by dragging. The
+  // handle (not the whole row) carries `draggable`, so a drag can never be
+  // confused with the click that expands/collapses the row.
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOnto: () => void;
 }) {
   const [open, setOpen] = useState(startOpen);
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const [draggedChoiceIndex, setDraggedChoiceIndex] = useState<number | null>(null);
 
   function updateLevel(index: number, patch: Partial<StoredLevel>) {
     onChange({
@@ -69,15 +73,26 @@ export function QuestionRow({
     });
   }
 
-  function removeChoice() {
-    // Always drops the LAST choice. Removing from the middle would leave
-    // a hole in the value sequence that validateQuestionSet rejects;
-    // dropping the last one and renumbering (a no-op here, since the
-    // remaining values were already contiguous) sidesteps that entirely.
+  // Removes the choice at any position, not just the last one -- renumbered
+  // afterward closes whatever gap that leaves, so the remaining values stay
+  // contiguous 1..n regardless of which one was removed.
+  function removeChoiceAt(index: number) {
     onChange({
       ...question,
-      levels: renumbered(question.levels.slice(0, -1)),
+      levels: renumbered(question.levels.filter((_, i) => i !== index)),
     });
+  }
+
+  // Moves the choice at `from` to sit right before whatever is currently
+  // at `to`, then renumbers -- same pattern as removeChoiceAt, so a
+  // reordered choice's rating value always matches its new position, not
+  // whatever it was labeled before the drag.
+  function reorderChoice(from: number, to: number) {
+    if (from === to) return;
+    const next = [...question.levels];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange({ ...question, levels: renumbered(next) });
   }
 
   // Two-step inline confirm matching components/DeleteSubmissionButton.tsx:
@@ -93,12 +108,34 @@ export function QuestionRow({
   }
 
   return (
-    <div className="border-b border-line py-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-start gap-3 text-left cursor-pointer"
-      >
+    <div
+      className={
+        dragging
+          ? "border-b border-line py-3 opacity-40"
+          : "border-b border-line py-3"
+      }
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOnto();
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          aria-label={`Drag to reorder ${question.id}`}
+          title="Drag to reorder"
+          className="mt-1 shrink-0 cursor-grab text-ink-muted select-none active:cursor-grabbing"
+        >
+          ⠿
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-start gap-3 text-left cursor-pointer"
+        >
         <span className="mt-0.5 shrink-0 rounded bg-[var(--color-tint)] px-1.5 py-0.5 text-xs font-medium text-ink">
           {question.id}
         </span>
@@ -115,32 +152,12 @@ export function QuestionRow({
         <span className="shrink-0 text-xs text-ink-muted">
           {open ? "Close" : "Edit"}
         </span>
-      </button>
+        </button>
+      </div>
 
       {open && (
         <div className="mt-4 pl-2">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={onMoveUp}
-                disabled={!canMoveUp}
-                aria-label={`Move ${question.id} up`}
-                className="rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-              >
-                &uarr;
-              </button>
-              <button
-                type="button"
-                onClick={onMoveDown}
-                disabled={!canMoveDown}
-                aria-label={`Move ${question.id} down`}
-                className="rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-              >
-                &darr;
-              </button>
-            </div>
-
             <label className="flex items-center gap-2 text-xs text-ink-muted">
               Gap
               <select
@@ -206,54 +223,78 @@ export function QuestionRow({
           </p>
 
           {question.levels.map((level, index) => (
-            <div key={index} className="mt-3 rounded-md border border-line p-3">
-              <div className="flex items-center gap-2">
+            <div
+              key={index}
+              className={
+                draggedChoiceIndex === index
+                  ? "mt-2 flex items-start gap-2 opacity-40"
+                  : "mt-2 flex items-start gap-2"
+              }
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggedChoiceIndex !== null) reorderChoice(draggedChoiceIndex, index);
+                setDraggedChoiceIndex(null);
+              }}
+            >
+              <div className="mt-2 flex shrink-0 flex-col items-center gap-1">
+                <span
+                  draggable
+                  onDragStart={() => setDraggedChoiceIndex(index)}
+                  onDragEnd={() => setDraggedChoiceIndex(null)}
+                  aria-label={`Drag to reorder choice ${index + 1}`}
+                  title="Drag to reorder"
+                  className="cursor-grab text-xs leading-none text-ink-muted select-none active:cursor-grabbing"
+                >
+                  ⠿
+                </span>
                 <span className="rounded-full bg-maroon px-2 py-0.5 text-xs font-medium text-white">
                   {index + 1}
                 </span>
-                <span className="text-xs text-ink-muted">
+                <span className="text-[10px] leading-tight text-ink-muted">
                   {tierForLevel(level.value, question.levels.length)}
                 </span>
               </div>
-              <input
-                type="text"
-                value={level.label}
-                onChange={(e) => updateLevel(index, { label: e.target.value })}
-                placeholder="Short label"
-                className="mt-2 w-full rounded-md border border-line bg-paper-raised px-3 py-1.5 text-sm text-ink focus:outline-none"
-              />
-              <textarea
-                value={level.description}
-                onChange={(e) =>
-                  updateLevel(index, { description: e.target.value })
-                }
-                rows={2}
-                placeholder="Full description"
-                className="mt-2 w-full rounded-md border border-line bg-paper-raised px-3 py-1.5 text-sm text-ink focus:outline-none"
-              />
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={level.label}
+                  onChange={(e) => updateLevel(index, { label: e.target.value })}
+                  placeholder="Short label"
+                  className="w-full rounded-md border border-line bg-paper-raised px-3 py-1.5 text-sm text-ink focus:outline-none"
+                />
+                <textarea
+                  value={level.description}
+                  onChange={(e) =>
+                    updateLevel(index, { description: e.target.value })
+                  }
+                  rows={2}
+                  placeholder="Full description"
+                  className="mt-1 w-full rounded-md border border-line bg-paper-raised px-3 py-1.5 text-sm text-ink focus:outline-none"
+                />
+              </div>
+              {question.levels.length > MIN_LEVELS && (
+                <button
+                  type="button"
+                  onClick={() => removeChoiceAt(index)}
+                  aria-label={`Remove choice ${index + 1}`}
+                  className="mt-1 shrink-0 rounded-full p-1 leading-none text-ink-muted hover:bg-[var(--color-tint)] hover:text-maroon cursor-pointer"
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {question.levels.length < MAX_LEVELS && (
-              <button
-                type="button"
-                onClick={addChoice}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-ink-muted hover:text-ink cursor-pointer"
-              >
-                Add choice
-              </button>
-            )}
-            {question.levels.length > MIN_LEVELS && (
-              <button
-                type="button"
-                onClick={removeChoice}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-ink-muted hover:text-ink cursor-pointer"
-              >
-                Remove choice
-              </button>
-            )}
-          </div>
+          {question.levels.length < MAX_LEVELS && (
+            <button
+              type="button"
+              onClick={addChoice}
+              className="mt-2 rounded-md border border-dashed border-line px-3 py-1 text-xs text-ink-muted hover:border-maroon hover:text-maroon cursor-pointer"
+            >
+              + Add choice
+            </button>
+          )}
         </div>
       )}
     </div>

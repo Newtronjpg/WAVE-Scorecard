@@ -72,6 +72,7 @@ export function QuestionSetEditor({
   // A newly added question opens itself so there's somewhere to type
   // immediately, without an extra click to expand it.
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const [draggedQuestionId, setDraggedQuestionId] = useState<string | null>(null);
 
   const validation = useMemo(() => validateQuestionSet(questions), [questions]);
   const problems = validation.ok ? [] : validation.errors;
@@ -302,36 +303,23 @@ export function QuestionSetEditor({
     setQuestions((current) => current.filter((q) => q.id !== id));
   }
 
-  // Swaps a question with its nearest same-gap neighbor in the underlying
-  // array, wherever that neighbor actually sits -- questions from other
-  // gaps can be interleaved between them and this still reorders correctly,
-  // because every gap's section renders by filtering this same array.
-  function moveQuestion(id: string, direction: "up" | "down") {
+  // Drag-and-drop reorder: drops the dragged question immediately before
+  // wherever the target question currently sits in the underlying array.
+  // Only meaningful within a gap -- a question's gap is set from the
+  // dropdown, not by dragging it into a different section -- so this is a
+  // no-op across gaps rather than silently reassigning one.
+  function reorderQuestion(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
     setQuestions((current) => {
-      const idx = current.findIndex((q) => q.id === id);
-      if (idx === -1) return current;
-      const gap = current[idx].gap;
-
-      let swapIdx = -1;
-      if (direction === "up") {
-        for (let i = idx - 1; i >= 0; i--) {
-          if (current[i].gap === gap) {
-            swapIdx = i;
-            break;
-          }
-        }
-      } else {
-        for (let i = idx + 1; i < current.length; i++) {
-          if (current[i].gap === gap) {
-            swapIdx = i;
-            break;
-          }
-        }
-      }
-      if (swapIdx === -1) return current;
+      const fromIdx = current.findIndex((q) => q.id === draggedId);
+      const target = current.find((q) => q.id === targetId);
+      if (fromIdx === -1 || !target) return current;
+      if (current[fromIdx].gap !== target.gap) return current;
 
       const next = [...current];
-      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      const [moved] = next.splice(fromIdx, 1);
+      const insertAt = next.findIndex((q) => q.id === targetId);
+      next.splice(insertAt, 0, moved);
       return next;
     });
   }
@@ -347,7 +335,10 @@ export function QuestionSetEditor({
       id,
       gap,
       statement: "",
-      levels: [1, 2, 3].map((v) => ({ value: v, label: "", description: "" })),
+      // Four choices by default: it's the one count that maps onto the
+      // four tier names (Poor/Fair/Good/Excellent) with no level sharing
+      // a tier with another.
+      levels: [1, 2, 3, 4].map((v) => ({ value: v, label: "", description: "" })),
     };
     setQuestions((current) => [...current, newQuestion]);
     setJustAddedId(id);
@@ -581,17 +572,20 @@ export function QuestionSetEditor({
             <p className="mt-1 text-sm text-ink-muted">{gapMeta.tagline}</p>
 
             <div className="mt-4 border-t border-line">
-              {gapQuestions.map((question, index) => (
+              {gapQuestions.map((question) => (
                 <QuestionRow
                   key={question.id}
                   question={question}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < gapQuestions.length - 1}
                   startOpen={question.id === justAddedId}
                   onChange={(next) => updateQuestion(question.id, next)}
-                  onMoveUp={() => moveQuestion(question.id, "up")}
-                  onMoveDown={() => moveQuestion(question.id, "down")}
                   onDelete={() => deleteQuestion(question.id)}
+                  dragging={draggedQuestionId === question.id}
+                  onDragStart={() => setDraggedQuestionId(question.id)}
+                  onDragEnd={() => setDraggedQuestionId(null)}
+                  onDropOnto={() => {
+                    if (draggedQuestionId) reorderQuestion(draggedQuestionId, question.id);
+                    setDraggedQuestionId(null);
+                  }}
                 />
               ))}
               {gapQuestions.length === 0 && (
