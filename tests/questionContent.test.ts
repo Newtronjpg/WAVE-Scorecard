@@ -5,7 +5,6 @@ import {
   getPublishedQuestions,
   getDraftQuestions,
   seedDraftQuestions,
-  getResolvedQuestions,
   getQuestionsForVersion,
 } from "@/lib/questionContent";
 import { QUESTIONS } from "@/lib/questions";
@@ -448,14 +447,17 @@ describe("getDraftQuestions", () => {
     expect(result.questions).toEqual(QUESTIONS);
   });
 
-  // The bug this pins: a draft row that EXISTS but fails validation must
-  // not be reported as updatedAt: null in a way that is indistinguishable
-  // from "no draft was ever written" -- Task 7's 409 check needs to know
-  // there IS a row it failed to read, not that there is nothing to
-  // conflict with. The timestamp on the bad row must not leak through
-  // either, since it cannot be trusted to describe content nobody could
-  // parse.
-  it("does not surface the bad row's timestamp when the draft row exists but fails validation", async () => {
+  // A draft row that EXISTS but fails validation must not be reported as
+  // updatedAt: null in a way that is indistinguishable from "no draft was
+  // ever written" -- Task 7's 409 check, and the editor's corruption
+  // warning, both need to know there IS a row it failed to read, not that
+  // there is nothing to conflict with. The timestamp on the bad row must
+  // not leak through either, since it cannot be trusted to describe
+  // content nobody could parse. source "draft" is the one value that
+  // signals this distinctly from the "no draft row at all" case below,
+  // even though the served CONTENT is still the safe published/factory
+  // fallback.
+  it("reports source \"draft\" (with updatedAt null) when the draft row exists but fails validation", async () => {
     findUniqueDraftMock.mockResolvedValue({
       id: "draft",
       questions: [{ id: "W1", gap: "wealth" }],
@@ -465,8 +467,9 @@ describe("getDraftQuestions", () => {
 
     const result = await getDraftQuestions();
 
-    expect(result.source).toBe("factory");
+    expect(result.source).toBe("draft");
     expect(result.updatedAt).toBeNull();
+    expect(result.questions).toEqual(QUESTIONS);
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
@@ -567,36 +570,5 @@ describe("seedDraftQuestions", () => {
     findUniqueDraftMock.mockRejectedValue(new Error("draft table unreachable"));
 
     await expect(seedDraftQuestions()).rejects.toThrow("draft table unreachable");
-  });
-});
-
-describe("getResolvedQuestions", () => {
-  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  beforeEach(() => {
-    findFirstVersionMock.mockReset();
-    findManyOverrideMock.mockReset().mockResolvedValue([]);
-    consoleErrorSpy.mockClear();
-  });
-
-  it("delegates to getPublishedQuestions", async () => {
-    findFirstVersionMock.mockResolvedValue({
-      version: 9,
-      questions: factoryQuestionSet(),
-      note: null,
-      publishedAt: new Date(),
-    });
-
-    const questions = await getResolvedQuestions();
-
-    expect(questions[0].levels[0].tier).toBe("Poor");
-  });
-
-  it("returns the factory questions when the underlying read fails", async () => {
-    findFirstVersionMock.mockRejectedValue(new Error("connection refused"));
-
-    const questions = await getResolvedQuestions();
-
-    expect(questions).toEqual(QUESTIONS);
   });
 });

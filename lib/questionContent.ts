@@ -24,9 +24,8 @@ import {
 //
 // The fallback chain is the safety-critical part of this file, but it
 // only covers the READ paths (resolveQuestions, getPublishedQuestions,
-// getQuestionsForVersion, getDraftQuestions, getResolvedQuestions): a
-// missing table, a read error, or an invalid stored set must all degrade
-// to the factory
+// getQuestionsForVersion, getDraftQuestions): a missing table, a read
+// error, or an invalid stored set must all degrade to the factory
 // questions (optionally with lingering QuestionOverride wording layered
 // on, see getPublishedQuestions) rather than breaking the assessment for
 // every prospect. That is not theoretical -- a missing table caused a
@@ -257,6 +256,16 @@ export async function getDraftQuestions(): Promise<{
       console.error(
         "Draft question set failed validation; falling back to the published set."
       );
+      // The row EXISTS but couldn't be read cleanly -- report source
+      // "draft" (with updatedAt still null) so a caller can tell this
+      // apart from "no draft was ever written". The CONTENT served is
+      // still the safe published/factory fallback below; only the
+      // reported source changes, since that is the one signal that lets
+      // Task 7's editor warn "your draft could not be read" instead of
+      // silently treating a corrupt row as if nothing were there to
+      // conflict with.
+      const published = await getPublishedQuestions();
+      return { questions: published.questions, updatedAt: null, source: "draft" };
     }
   } catch (e) {
     console.error("Failed to read the draft question set, falling back to the published set:", e);
@@ -323,12 +332,4 @@ export async function seedDraftQuestions(): Promise<{
   });
 
   return { questions: seedQuestions, updatedAt: written.updatedAt };
-}
-
-// Deprecated: kept only so app/admin/questions/page.tsx keeps compiling
-// between this task and Task 7, which rewrites that page against
-// getDraftQuestions/getPublishedQuestions directly and deletes this
-// alias.
-export async function getResolvedQuestions(): Promise<Question[]> {
-  return (await getPublishedQuestions()).questions;
 }

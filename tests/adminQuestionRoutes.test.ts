@@ -17,6 +17,7 @@ const findUniqueDraftMock = vi.fn();
 const upsertDraftMock = vi.fn();
 const findFirstVersionMock = vi.fn();
 const findUniqueVersionMock = vi.fn();
+const findManyVersionMock = vi.fn();
 const createVersionMock = vi.fn();
 const findManyOverrideMock = vi.fn();
 
@@ -29,6 +30,7 @@ vi.mock("@/lib/db", () => ({
     questionSetVersion: {
       findFirst: (...args: unknown[]) => findFirstVersionMock(...args),
       findUnique: (...args: unknown[]) => findUniqueVersionMock(...args),
+      findMany: (...args: unknown[]) => findManyVersionMock(...args),
       create: (...args: unknown[]) => createVersionMock(...args),
     },
     questionOverride: {
@@ -56,6 +58,7 @@ beforeEach(() => {
   });
   findFirstVersionMock.mockReset().mockResolvedValue(null);
   findUniqueVersionMock.mockReset().mockResolvedValue(null);
+  findManyVersionMock.mockReset().mockResolvedValue([]);
   createVersionMock.mockReset().mockResolvedValue({});
   findManyOverrideMock.mockReset().mockResolvedValue([]);
 });
@@ -100,15 +103,34 @@ describe("GET /api/admin/questions/draft", () => {
     expect(json.source).toBe("draft");
   });
 
-  it('reports source "factory" when the draft row is unreadable and nothing is published', async () => {
-    // A draft row exists but fails validateQuestionSet -- getDraftQuestions
-    // falls through to the published set, then the factory set, and
-    // reports which one it used via `source`.
+  it('reports source "draft" (not "factory") when the draft row exists but is unreadable', async () => {
+    // A draft row EXISTS but fails validateQuestionSet -- getDraftQuestions
+    // still serves the published/factory content as a safe fallback, but
+    // must report source "draft" (with updatedAt null) rather than
+    // "factory"/"published", so a caller can tell "a draft exists but
+    // couldn't be read" apart from "no draft was ever written". See
+    // lib/questionContent.ts's getDraftQuestions and
+    // tests/questionContent.test.ts for the full contract this pins.
     findUniqueDraftMock.mockResolvedValue({
       id: "draft",
       questions: [],
       updatedAt: new Date("2026-01-03T00:00:00.000Z"),
     });
+    findFirstVersionMock.mockResolvedValue(null);
+
+    const { GET } = await import("@/app/api/admin/questions/draft/route");
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.source).toBe("draft");
+    expect(json.updatedAt).toBeNull();
+  });
+
+  it('reports source "factory" when there is no draft row at all and nothing is published', async () => {
+    // Distinct from the corrupt-row case above: no row exists here, so
+    // there is genuinely nothing to conflict with, and source must say so.
+    findUniqueDraftMock.mockResolvedValue(null);
     findFirstVersionMock.mockResolvedValue(null);
 
     const { GET } = await import("@/app/api/admin/questions/draft/route");
@@ -423,6 +445,59 @@ describe("POST /api/admin/questions/rollback", () => {
 
     expect(res.status).toBe(404);
     expect(createVersionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/admin/questions/versions", () => {
+  // Backs components/VersionHistory.tsx's rollback UI (RULING D, Task 7
+  // fix round 1). Read-only, metadata only -- version, note, publishedAt
+  // -- never the (large, unused here) `questions` column.
+
+  it("lists every version newest-first with its note and timestamp", async () => {
+    const publishedAt3 = new Date("2026-01-01T00:00:00.000Z");
+    const publishedAt5 = new Date("2026-01-05T00:00:00.000Z");
+    findManyVersionMock.mockResolvedValue([
+      { version: 5, note: "Reworded W3.", publishedAt: publishedAt5 },
+      { version: 3, note: null, publishedAt: publishedAt3 },
+    ]);
+
+    const { GET } = await import("@/app/api/admin/questions/versions/route");
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.versions).toEqual([
+      { version: 5, note: "Reworded W3.", publishedAt: publishedAt5.toISOString() },
+      { version: 3, note: null, publishedAt: publishedAt3.toISOString() },
+    ]);
+    expect(findManyVersionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { version: "desc" },
+        select: { version: true, note: true, publishedAt: true },
+      })
+    );
+  });
+
+  it("returns an empty list when nothing has ever been published", async () => {
+    findManyVersionMock.mockResolvedValue([]);
+
+    const { GET } = await import("@/app/api/admin/questions/versions/route");
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.versions).toEqual([]);
+  });
+
+  it("returns 500 with a readable error on a read failure", async () => {
+    findManyVersionMock.mockRejectedValue(new Error("db unreachable"));
+
+    const { GET } = await import("@/app/api/admin/questions/versions/route");
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(typeof json.error).toBe("string");
   });
 });
 
