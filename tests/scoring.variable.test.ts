@@ -80,21 +80,35 @@ describe("normalizeAnswer with a variable choice count", () => {
 });
 
 describe("tierForLevel", () => {
-  it("reproduces the original five-choice mapping exactly", () => {
+  // Position-based, evenly distributed across the four tier names, not the
+  // original fixed 25/50/75 cutoffs on the normalized score -- those
+  // collided at five choices, where a boundary landing exactly on a level
+  // put both 4 and 5 in "Excellent". Distributing by position instead
+  // guarantees no tier ever absorbs more than one extra level, and always
+  // anchors the bottom choice at Poor and the top at Excellent for any
+  // choiceCount of 4 or more (see lib/scoring.ts for the exact algorithm).
+  it("distributes five choices with the extra level at the bottom, not a duplicate at the top", () => {
     expect(tierForLevel(1, 5)).toBe("Poor");
-    expect(tierForLevel(2, 5)).toBe("Fair");
-    expect(tierForLevel(3, 5)).toBe("Good");
-    expect(tierForLevel(4, 5)).toBe("Excellent");
+    expect(tierForLevel(2, 5)).toBe("Poor");
+    expect(tierForLevel(3, 5)).toBe("Fair");
+    expect(tierForLevel(4, 5)).toBe("Good");
     expect(tierForLevel(5, 5)).toBe("Excellent");
   });
 
-  it("puts the extremes of a two-choice question at Poor and Excellent", () => {
-    expect(tierForLevel(1, 2)).toBe("Poor");
-    expect(tierForLevel(2, 2)).toBe("Excellent");
+  it("gives four choices one tier each, with no collision at all", () => {
+    expect(tierForLevel(1, 4)).toBe("Poor");
+    expect(tierForLevel(2, 4)).toBe("Fair");
+    expect(tierForLevel(3, 4)).toBe("Good");
+    expect(tierForLevel(4, 4)).toBe("Excellent");
   });
 
-  it("puts the middle of a three-choice question at Good", () => {
-    expect(tierForLevel(2, 3)).toBe("Good");
+  it("puts the extremes of a two-choice question at Poor and Good -- Excellent needs a 4th level to be reachable", () => {
+    expect(tierForLevel(1, 2)).toBe("Poor");
+    expect(tierForLevel(2, 2)).toBe("Good");
+  });
+
+  it("puts the middle of a three-choice question at Fair", () => {
+    expect(tierForLevel(2, 3)).toBe("Fair");
   });
 });
 

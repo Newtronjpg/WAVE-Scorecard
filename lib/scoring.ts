@@ -90,15 +90,33 @@ export function normalizeAnswer(rating: number, choiceCount: number = 5): number
   return ((rating - 1) / (choiceCount - 1)) * 100;
 }
 
-// Tier now derives from the normalized position, not the raw rating, so it
-// means the same thing whatever the choice count. At five choices this
-// reproduces the original 1=Poor 2=Fair 3=Good 4-5=Excellent map exactly.
+// Tier derives from the level's POSITION among choiceCount options, spread
+// as evenly as possible across the four tier names, rather than from fixed
+// 25/50/75 cutoffs on the normalized score. Fixed cutoffs read cleanly at
+// five choices (0/25/50/75/100 lines up 1=Poor 2=Fair 3=Good 4=Excellent
+// 5=Excellent) but the last two collide into the same label -- a quartile
+// boundary landing exactly on a level, which happens at 5, 9, 13... choices
+// and reads as a bug once an admin can see every level's tier side by side.
+// Even distribution guarantees no more than one tier ever absorbs an extra
+// level, and always anchors the bottom choice at Poor and the top choice at
+// Excellent for any choiceCount of 4 or more.
 export function tierForLevel(value: number, choiceCount: number): Tier {
-  const normalized = normalizeAnswer(value, choiceCount);
-  if (normalized < 25) return "Poor";
-  if (normalized < 50) return "Fair";
-  if (normalized < 75) return "Good";
-  return "Excellent";
+  // Reuses normalizeAnswer purely for its validation (throws on an
+  // out-of-range choiceCount or value); the tier itself comes from
+  // position, not the normalized score.
+  //
+  // This is intentionally NOT shared with lib/questions.ts's own tierFor,
+  // which stays on the original fixed 1=Poor 2=Fair 3=Good 4-5=Excellent
+  // map -- tests/scoring.test.ts pins that exact mapping for the factory
+  // question bank's literal data and must never be edited. That's safe to
+  // leave alone: QuestionRow.tsx (and withDerivedTiers) never read a
+  // stored tier field, they call this function fresh on every render, so
+  // the admin editor always reflects the distribution below regardless of
+  // what's baked into the factory data.
+  normalizeAnswer(value, choiceCount);
+  const tiers: Tier[] = ["Poor", "Fair", "Good", "Excellent"];
+  const bucket = Math.floor(((value - 1) * tiers.length) / choiceCount);
+  return tiers[Math.min(bucket, tiers.length - 1)];
 }
 
 export function bandFor(score: number): ReadinessBand {

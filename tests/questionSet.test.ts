@@ -243,19 +243,23 @@ describe("validateQuestionSet rejects", () => {
 
 describe("withDerivedTiers", () => {
   it("attaches a tier to every level", () => {
+    // Tiers distribute evenly by position now, not fixed 25/50/75 cutoffs
+    // on the normalized score -- those collided at five choices (see
+    // lib/scoring.ts's tierForLevel), putting the extra level at the
+    // bottom instead of duplicating "Excellent" at the top.
     const [q] = withDerivedTiers([question("W1", "wealth", 5)]);
     expect(q.levels.map((l) => l.tier)).toEqual([
       "Poor",
+      "Poor",
       "Fair",
       "Good",
-      "Excellent",
       "Excellent",
     ]);
   });
 
   it("derives tiers correctly for a three-choice question", () => {
     const [q] = withDerivedTiers([question("W1", "wealth", 3)]);
-    expect(q.levels.map((l) => l.tier)).toEqual(["Poor", "Good", "Excellent"]);
+    expect(q.levels.map((l) => l.tier)).toEqual(["Poor", "Fair", "Good"]);
   });
 });
 

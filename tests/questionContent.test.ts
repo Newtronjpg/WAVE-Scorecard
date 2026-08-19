@@ -8,7 +8,7 @@ import {
   getQuestionsForVersion,
 } from "@/lib/questionContent";
 import { QUESTIONS } from "@/lib/questions";
-import { factoryQuestionSet } from "@/lib/questionSet";
+import { factoryQuestionSet, toStored, withDerivedTiers } from "@/lib/questionSet";
 
 // Admin edits are stored as OVERRIDES on top of lib/questions.ts, which
 // keeps owning structure: which questions exist, their gap, the 1-5
@@ -229,7 +229,7 @@ describe("getPublishedQuestions", () => {
     const result = await getPublishedQuestions();
 
     expect(result.version).toBeNull();
-    expect(result.questions).toEqual(QUESTIONS);
+    expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
   });
 
   it("returns the stored questions and version number for a valid published version", async () => {
@@ -270,7 +270,7 @@ describe("getPublishedQuestions", () => {
     const result = await getPublishedQuestions();
 
     expect(result.version).toBeNull();
-    expect(result.questions).toEqual(QUESTIONS);
+    expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
@@ -285,7 +285,7 @@ describe("getPublishedQuestions", () => {
     const result = await getPublishedQuestions();
 
     expect(result.version).toBeNull();
-    expect(result.questions).toEqual(QUESTIONS);
+    expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
@@ -361,7 +361,7 @@ describe("getQuestionsForVersion", () => {
     const result = await getQuestionsForVersion(3);
 
     expect(findUniqueVersionMock).toHaveBeenCalledWith({ where: { version: 3 } });
-    expect(result).toEqual(QUESTIONS);
+    expect(result).toEqual(withDerivedTiers(toStored(QUESTIONS)));
   });
 
   it("returns null when the requested version does not exist", async () => {
@@ -444,7 +444,7 @@ describe("getDraftQuestions", () => {
 
     expect(result.source).toBe("factory");
     expect(result.updatedAt).toBeNull();
-    expect(result.questions).toEqual(QUESTIONS);
+    expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
   });
 
   // A draft row that EXISTS but fails validation must not be reported as
@@ -469,7 +469,13 @@ describe("getDraftQuestions", () => {
 
     expect(result.source).toBe("draft");
     expect(result.updatedAt).toBeNull();
-    expect(result.questions).toEqual(QUESTIONS);
+    // Not a byte-exact QUESTIONS comparison: this path runs the factory
+    // set through withDerivedTiers (via factoryWithOverrides, merging in
+    // zero overrides), which recomputes each level's tier fresh rather
+    // than trusting whatever lib/questions.ts has baked in -- see
+    // lib/scoring.ts's tierForLevel for why those two are allowed to
+    // differ.
+    expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
