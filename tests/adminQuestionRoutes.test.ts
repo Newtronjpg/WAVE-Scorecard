@@ -21,6 +21,9 @@ const findManyVersionMock = vi.fn();
 const createVersionMock = vi.fn();
 const deleteVersionMock = vi.fn();
 const findManyOverrideMock = vi.fn();
+const updateManyVersionMock = vi.fn();
+const updateVersionMock = vi.fn();
+const transactionMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -34,10 +37,13 @@ vi.mock("@/lib/db", () => ({
       findMany: (...args: unknown[]) => findManyVersionMock(...args),
       create: (...args: unknown[]) => createVersionMock(...args),
       delete: (...args: unknown[]) => deleteVersionMock(...args),
+      updateMany: (...args: unknown[]) => updateManyVersionMock(...args),
+      update: (...args: unknown[]) => updateVersionMock(...args),
     },
     questionOverride: {
       findMany: (...args: unknown[]) => findManyOverrideMock(...args),
     },
+    $transaction: (...args: unknown[]) => transactionMock(...args),
   },
 }));
 
@@ -63,6 +69,9 @@ beforeEach(() => {
   findManyVersionMock.mockReset().mockResolvedValue([]);
   createVersionMock.mockReset().mockResolvedValue({});
   deleteVersionMock.mockReset().mockResolvedValue({});
+  updateManyVersionMock.mockReset().mockResolvedValue({});
+  updateVersionMock.mockReset().mockResolvedValue({});
+  transactionMock.mockReset().mockResolvedValue([]);
   findManyOverrideMock.mockReset().mockResolvedValue([]);
 });
 
@@ -460,8 +469,8 @@ describe("GET /api/admin/questions/versions", () => {
     const publishedAt3 = new Date("2026-01-01T00:00:00.000Z");
     const publishedAt5 = new Date("2026-01-05T00:00:00.000Z");
     findManyVersionMock.mockResolvedValue([
-      { version: 5, note: "Reworded W3.", publishedAt: publishedAt5 },
-      { version: 3, note: null, publishedAt: publishedAt3 },
+      { version: 5, note: "Reworded W3.", publishedAt: publishedAt5, isDefault: false },
+      { version: 3, note: null, publishedAt: publishedAt3, isDefault: true },
     ]);
 
     const { GET } = await import("@/app/api/admin/questions/versions/route");
@@ -470,13 +479,23 @@ describe("GET /api/admin/questions/versions", () => {
 
     expect(res.status).toBe(200);
     expect(json.versions).toEqual([
-      { version: 5, note: "Reworded W3.", publishedAt: publishedAt5.toISOString() },
-      { version: 3, note: null, publishedAt: publishedAt3.toISOString() },
+      {
+        version: 5,
+        note: "Reworded W3.",
+        publishedAt: publishedAt5.toISOString(),
+        isDefault: false,
+      },
+      {
+        version: 3,
+        note: null,
+        publishedAt: publishedAt3.toISOString(),
+        isDefault: true,
+      },
     ]);
     expect(findManyVersionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         orderBy: { version: "desc" },
-        select: { version: true, note: true, publishedAt: true },
+        select: { version: true, note: true, publishedAt: true, isDefault: true },
       })
     );
   });
@@ -608,5 +627,99 @@ describe("POST /api/admin/questions/reset-draft", () => {
 
     expect(res.status).toBe(200);
     expect(upsertDraftMock.mock.calls[0][0].create.questions).toEqual(FACTORY);
+  });
+
+  it('to: "default" overwrites the draft with the admin-designated default version', async () => {
+    const defaultQuestions = FACTORY.map((q) =>
+      q.id === FACTORY[0].id ? { ...q, statement: "The real default wording." } : q
+    );
+    findFirstVersionMock.mockResolvedValue({
+      version: 2,
+      questions: defaultQuestions,
+      note: "Our default",
+      publishedAt: new Date(),
+      isDefault: true,
+    });
+
+    const { POST } = await import("@/app/api/admin/questions/reset-draft/route");
+    const res = await POST(jsonRequest(url, "POST", { to: "default" }));
+
+    expect(res.status).toBe(200);
+    expect(findFirstVersionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { isDefault: true } })
+    );
+    const saved = upsertDraftMock.mock.calls[0][0].create.questions;
+    expect(saved[0].statement).toBe("The real default wording.");
+  });
+
+  it('to: "default" with nothing designated falls back to the factory set', async () => {
+    findFirstVersionMock.mockResolvedValue(null);
+
+    const { POST } = await import("@/app/api/admin/questions/reset-draft/route");
+    const res = await POST(jsonRequest(url, "POST", { to: "default" }));
+
+    expect(res.status).toBe(200);
+    expect(upsertDraftMock.mock.calls[0][0].create.questions).toEqual(FACTORY);
+  });
+
+  it("rejects a `to` value that isn't live, default, or factory", async () => {
+    const { POST } = await import("@/app/api/admin/questions/reset-draft/route");
+    const res = await POST(jsonRequest(url, "POST", { to: "nonsense" }));
+
+    expect(res.status).toBe(400);
+    expect(upsertDraftMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/admin/questions/versions/[version]/default", () => {
+  function params(version: string) {
+    return Promise.resolve({ version });
+  }
+
+  it("marks the target version as default, unsetting any previous default first", async () => {
+    findUniqueVersionMock.mockResolvedValue({ version: 3 });
+    const { POST } = await import(
+      "@/app/api/admin/questions/versions/[version]/default/route"
+    );
+    const res = await POST({} as never, { params: params("3") });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    const ops = transactionMock.mock.calls[0][0];
+    expect(ops.length).toBe(2);
+  });
+
+  it("returns 404 for a version that does not exist", async () => {
+    findUniqueVersionMock.mockResolvedValue(null);
+    const { POST } = await import(
+      "@/app/api/admin/questions/versions/[version]/default/route"
+    );
+    const res = await POST({} as never, { params: params("99") });
+
+    expect(res.status).toBe(404);
+    expect(transactionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a non-numeric version", async () => {
+    const { POST } = await import(
+      "@/app/api/admin/questions/versions/[version]/default/route"
+    );
+    const res = await POST({} as never, { params: params("nope") });
+
+    expect(res.status).toBe(400);
+    expect(transactionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 on an unexpected failure", async () => {
+    findUniqueVersionMock.mockResolvedValue({ version: 3 });
+    transactionMock.mockRejectedValue(new Error("db unreachable"));
+    const { POST } = await import(
+      "@/app/api/admin/questions/versions/[version]/default/route"
+    );
+    const res = await POST({} as never, { params: params("3") });
+
+    expect(res.status).toBe(500);
   });
 });

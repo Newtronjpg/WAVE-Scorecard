@@ -22,6 +22,7 @@ interface VersionSummary {
   version: number;
   note: string | null;
   publishedAt: string;
+  isDefault: boolean;
 }
 
 export function VersionHistory({
@@ -46,6 +47,12 @@ export function VersionHistory({
     null
   );
   const [deletingVersion, setDeletingVersion] = useState<number | null>(null);
+  const [defaultArmedVersion, setDefaultArmedVersion] = useState<
+    number | null
+  >(null);
+  const [settingDefaultVersion, setSettingDefaultVersion] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -118,7 +125,7 @@ export function VersionHistory({
       // right after a real, successful rollback, which reads as "this
       // isn't working" if nothing says otherwise.
       setMessage(
-        `Version ${data.version} is now live. Your draft here is unaffected -- use "Load what's live into draft" above if you want the editor to match.`
+        `Version ${data.version} is now live. Your draft here is unaffected -- publishing never touches the draft. If you want the editor to match, use "Set as default" on version ${data.version} below, then "Reset to default" above.`
       );
       // Force a re-fetch so the list picks up the new version row (its
       // real note and timestamp) rather than guessing at its shape here.
@@ -166,6 +173,50 @@ export function VersionHistory({
       setError("Something went wrong. Please try again.");
     } finally {
       setDeletingVersion(null);
+    }
+  }
+
+  function handleSetDefaultClick(version: number) {
+    if (defaultArmedVersion !== version) {
+      setDefaultArmedVersion(version);
+      setTimeout(() => {
+        setDefaultArmedVersion((current) =>
+          current === version ? null : current
+        );
+      }, 4000);
+      return;
+    }
+    setDefaultArmedVersion(null);
+    confirmSetDefault(version);
+  }
+
+  async function confirmSetDefault(version: number) {
+    setSettingDefaultVersion(version);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/questions/versions/${version}/default`,
+        { method: "POST" }
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Could not set as default. Please try again.");
+        return;
+      }
+
+      setMessage(
+        `Version ${version} is now the default -- "Reset to default" in the editor above will load this version.`
+      );
+      setVersions((current) =>
+        current.map((v) => ({ ...v, isDefault: v.version === version }))
+      );
+    } catch (e) {
+      console.error("confirmSetDefault failed:", e);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSettingDefaultVersion(null);
     }
   }
 
@@ -220,6 +271,11 @@ export function VersionHistory({
                 const deleteArmed = deleteArmedVersion === v.version;
                 const deleting = deletingVersion === v.version;
                 const anyDeleting = deletingVersion !== null;
+                const defaultArmed = defaultArmedVersion === v.version;
+                const settingDefault = settingDefaultVersion === v.version;
+                const anySettingDefault = settingDefaultVersion !== null;
+                const anyBusy =
+                  anyRollingBack || anyDeleting || anySettingDefault;
 
                 return (
                   <li
@@ -234,6 +290,11 @@ export function VersionHistory({
                             Live
                           </span>
                         )}
+                        {v.isDefault && (
+                          <span className="ml-2 rounded border border-line px-1.5 py-0.5 text-xs font-medium text-ink-muted">
+                            Default
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-ink-muted">
                         {new Date(v.publishedAt).toLocaleString()}
@@ -241,48 +302,73 @@ export function VersionHistory({
                       </p>
                     </div>
 
-                    {!isLive && (
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      {!v.isDefault && (
                         <button
                           type="button"
-                          onClick={() => handleRollbackClick(v.version)}
-                          disabled={anyRollingBack || anyDeleting}
+                          onClick={() => handleSetDefaultClick(v.version)}
+                          disabled={anyBusy}
                           aria-label={
-                            armed
-                              ? `Confirm rolling back to version ${v.version}`
-                              : `Roll back to version ${v.version}`
+                            defaultArmed
+                              ? `Confirm setting version ${v.version} as default`
+                              : `Set version ${v.version} as default`
                           }
                           className={
-                            armed
+                            defaultArmed
                               ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                               : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                           }
                         >
-                          {busy
-                            ? "Rolling back…"
-                            : armed
+                          {settingDefault
+                            ? "Setting…"
+                            : defaultArmed
                               ? "Confirm?"
-                              : "Roll back to this version"}
+                              : "Set as default"}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClick(v.version)}
-                          disabled={anyRollingBack || anyDeleting}
-                          aria-label={
-                            deleteArmed
-                              ? `Confirm deleting version ${v.version}`
-                              : `Delete version ${v.version}`
-                          }
-                          className={
-                            deleteArmed
-                              ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                              : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                          }
-                        >
-                          {deleting ? "Deleting…" : deleteArmed ? "Confirm?" : "Delete"}
-                        </button>
-                      </div>
-                    )}
+                      )}
+                      {!isLive && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleRollbackClick(v.version)}
+                            disabled={anyBusy}
+                            aria-label={
+                              armed
+                                ? `Confirm rolling back to version ${v.version}`
+                                : `Roll back to version ${v.version}`
+                            }
+                            className={
+                              armed
+                                ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                            }
+                          >
+                            {busy
+                              ? "Rolling back…"
+                              : armed
+                                ? "Confirm?"
+                                : "Roll back to this version"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClick(v.version)}
+                            disabled={anyBusy}
+                            aria-label={
+                              deleteArmed
+                                ? `Confirm deleting version ${v.version}`
+                                : `Delete version ${v.version}`
+                            }
+                            className={
+                              deleteArmed
+                                ? "rounded border border-maroon px-2 py-1 text-xs font-medium text-maroon disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                : "rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                            }
+                          >
+                            {deleting ? "Deleting…" : deleteArmed ? "Confirm?" : "Delete"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 );
               })}

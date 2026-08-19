@@ -5,12 +5,19 @@ import { db } from "@/lib/db";
 import { resolveQuestions } from "@/lib/questionContent";
 import { factoryQuestionSet, toStored, type StoredQuestion } from "@/lib/questionSet";
 
-// Discards whatever is in the draft and reseeds it from either the
-// currently-live published version or the shipped factory defaults -- an
-// admin's "start over" button.
+// Discards whatever is in the draft and reseeds it from the currently-live
+// published version, the admin-designated default version, or the shipped
+// factory defaults -- an admin's "start over" button.
+//
+// "default" is deliberately NOT the same thing as lib/questions.ts's
+// factoryQuestionSet(): that literal is pinned by tests/scoring.test.ts
+// and can never change shape, while "default" is whichever published
+// version an admin has marked as their real working baseline (see
+// app/api/admin/questions/versions/[version]/default/route.ts) -- for
+// this project, that's the 4-choice set, not the original 5-choice one.
 
 const resetSchema = z.object({
-  to: z.enum(["live", "factory"]),
+  to: z.enum(["live", "default", "factory"]),
 });
 
 export async function POST(req: NextRequest) {
@@ -24,7 +31,7 @@ export async function POST(req: NextRequest) {
   const parsed = resetSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Expected `to` to be "live" or "factory".' },
+      { error: 'Expected `to` to be "live", "default", or "factory".' },
       { status: 400 }
     );
   }
@@ -34,6 +41,21 @@ export async function POST(req: NextRequest) {
 
     if (parsed.data.to === "factory") {
       stored = factoryQuestionSet();
+    } else if (parsed.data.to === "default") {
+      const defaultVersion = await db.questionSetVersion.findFirst({
+        where: { isDefault: true },
+      });
+
+      if (defaultVersion) {
+        const resolved = resolveQuestions(defaultVersion.questions);
+        stored = resolved ? toStored(resolved) : factoryQuestionSet();
+      } else {
+        // No default has been designated yet -- fall back to the
+        // original 5-choice literal rather than fail outright, so this
+        // button always does SOMETHING sensible even before an admin has
+        // set a default for the first time.
+        stored = factoryQuestionSet();
+      }
     } else {
       const latest = await db.questionSetVersion.findFirst({
         orderBy: { version: "desc" },

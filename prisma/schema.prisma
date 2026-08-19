@@ -125,6 +125,14 @@ model QuestionSetVersion {
   questions   Json
   note        String?
   publishedAt DateTime @default(now())
+  // At most one version is ever true at a time (enforced in
+  // app/api/admin/questions/versions/[version]/default/route.ts, not by
+  // a DB constraint -- this table is small and admin-only, so a
+  // transactional unset-then-set is simpler than a partial unique index
+  // and just as safe). This is what "Reset to default" in the editor
+  // actually resets to -- deliberately NOT lib/questions.ts's shipped
+  // literal, which tests/scoring.test.ts pins and can never change.
+  isDefault   Boolean  @default(false)
 
   @@map("question_set_versions")
 }

@@ -61,7 +61,6 @@ export function QuestionSetEditor({
   const [publishArmed, setPublishArmed] = useState(false);
   const [publishNote, setPublishNote] = useState("");
   const [resetArmed, setResetArmed] = useState(false);
-  const [resetLiveArmed, setResetLiveArmed] = useState(false);
   // Two-step confirm for Reload/Discard, matching DeleteSubmissionButton's
   // arm-then-confirm-within-4s pattern -- both actions can silently
   // destroy unsaved edits with a single click otherwise. Reload only
@@ -259,7 +258,7 @@ export function QuestionSetEditor({
     }
   }
 
-  async function confirmReset(to: "live" | "factory") {
+  async function confirmReset(to: "default" | "factory") {
     setBusyAction("reset");
     clearTransient();
 
@@ -275,12 +274,10 @@ export function QuestionSetEditor({
         setError(data?.error ?? "Could not reset. Please try again.");
         setBusyAction(null);
         setResetArmed(false);
-        setResetLiveArmed(false);
         return;
       }
 
       setResetArmed(false);
-      setResetLiveArmed(false);
       // reset-draft doesn't return the new content, only { ok: true } --
       // read it back so the editor shows exactly what's now persisted.
       // reloadDraft manages its own busyAction lifecycle end-to-end (and
@@ -295,7 +292,6 @@ export function QuestionSetEditor({
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
       setResetArmed(false);
-      setResetLiveArmed(false);
     }
   }
 
@@ -405,17 +401,6 @@ export function QuestionSetEditor({
             {discardArmed ? "Confirm? This discards your unsaved edits" : "Discard changes"}
           </button>
 
-          {!resetLiveArmed && (
-            <button
-              type="button"
-              onClick={() => setResetLiveArmed(true)}
-              disabled={busy}
-              className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              Load what&rsquo;s live into draft
-            </button>
-          )}
-
           {!resetArmed && (
             <button
               type="button"
@@ -423,7 +408,7 @@ export function QuestionSetEditor({
               disabled={busy}
               className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
-              Reset to original 5-choice defaults
+              Reset to default
             </button>
           )}
 
@@ -443,52 +428,21 @@ export function QuestionSetEditor({
           these edits.
         </p>
 
-        {resetLiveArmed && (
-          <div className="mt-3 rounded-md border border-maroon p-3">
-            <p className="text-sm text-ink">
-              This throws away the current draft (including anything
-              unsaved) and replaces it with whatever&rsquo;s currently live
-              -- version {publishedVersion ?? "none"}. Use this after a
-              rollback or a publish elsewhere if you want the editor to
-              match what a prospect actually sees right now.
-            </p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => confirmReset("live")}
-                disabled={busy}
-                className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 cursor-pointer"
-              >
-                {busyAction === "reset" ? "Loading…" : "Confirm"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setResetLiveArmed(false)}
-                disabled={busy}
-                className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
         {resetArmed && (
           <div className="mt-3 rounded-md border border-maroon p-3">
             <p className="text-sm text-ink">
-              This is the ORIGINAL question set built into the code --
-              every question at 5 choices, none of your edits, not what
-              you&rsquo;ve been publishing. If you want your usual working
-              baseline back, cancel this and use &ldquo;Load what&rsquo;s
-              live into draft&rdquo; instead. This throws away the current
-              draft (including anything unsaved) and replaces it with
-              those original 5-choice defaults. The live assessment is
-              unaffected until you publish again.
+              This throws away the current draft (including anything
+              unsaved) and replaces it with whichever published version is
+              currently set as the default -- see &ldquo;Set as
+              default&rdquo; in version history below to choose or change
+              it. If none has ever been designated, this falls back to the
+              original defaults built into the code. The live assessment
+              is unaffected until you publish again.
             </p>
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
-                onClick={() => confirmReset("factory")}
+                onClick={() => confirmReset("default")}
                 disabled={busy}
                 className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 cursor-pointer"
               >
@@ -516,13 +470,13 @@ export function QuestionSetEditor({
                 ` Version ${publishedVersion} stays in history and can be rolled back to.`}
             </p>
             <label className="mt-2 block text-xs font-medium tracking-wide uppercase text-ink-muted">
-              Note (optional)
+              Name this version (optional)
             </label>
             <input
               type="text"
               value={publishNote}
               onChange={(e) => setPublishNote(e.target.value)}
-              placeholder="What changed?"
+              placeholder="e.g. &ldquo;Shorter wording, 4 choices&rdquo;"
               className="mt-1 w-full rounded-md border border-line bg-paper-raised px-3 py-1.5 text-sm text-ink focus:outline-none"
             />
             <div className="mt-2 flex gap-2">

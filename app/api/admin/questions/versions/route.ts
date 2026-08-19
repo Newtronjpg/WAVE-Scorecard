@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const versions = await db.questionSetVersion.findMany({
       orderBy: { version: "desc" },
-      select: { version: true, note: true, publishedAt: true },
+      select: { version: true, note: true, publishedAt: true, isDefault: true },
     });
 
     return NextResponse.json({
@@ -19,6 +19,7 @@ export async function GET() {
         version: v.version,
         note: v.note,
         publishedAt: v.publishedAt.toISOString(),
+        isDefault: v.isDefault,
       })),
     });
   } catch (e) {
