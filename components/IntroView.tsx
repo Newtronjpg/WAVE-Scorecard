@@ -3,7 +3,6 @@ import { GAPS } from "@/lib/questions";
 interface IntroViewProps {
   prospectName: string;
   companyName: string;
-  questionCount: number;
   onProspectNameChange: (value: string) => void;
   onCompanyNameChange: (value: string) => void;
   onStart: () => void;
@@ -12,7 +11,6 @@ interface IntroViewProps {
 export function IntroView({
   prospectName,
   companyName,
-  questionCount,
   onProspectNameChange,
   onCompanyNameChange,
   onStart,
@@ -43,11 +41,6 @@ export function IntroView({
           </div>
         ))}
       </div>
-
-      <p className="mt-6 text-sm text-ink-muted leading-relaxed">
-        {questionCount} quick statements, about five minutes. Reviewed with
-        your advisor and never shared outside the firm.
-      </p>
 
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>

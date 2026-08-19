@@ -147,7 +147,6 @@ export function Assessment({
       <IntroView
         prospectName={prospectName}
         companyName={companyName}
-        questionCount={questions.length}
         onProspectNameChange={setProspectName}
         onCompanyNameChange={setCompanyName}
         onStart={() => setView("section")}
