@@ -1,20 +1,41 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { QUESTIONS, type Question, type RatingLevel } from "./questions";
+import {
+  validateQuestionSet,
+  withDerivedTiers,
+  toStored,
+  factoryQuestionSet,
+  type StoredQuestion,
+} from "./questionSet";
 
-// Resolves the question wording shown to a prospect: the defaults in
-// lib/questions.ts with any admin edits applied on top.
+// Resolves the question set shown to a prospect and the one edited in the
+// admin UI.
 //
-// lib/questions.ts stays the source of truth for STRUCTURE, which
-// questions exist, their ids, their gap, the 1-5 scale, and each level's
-// tier. The database only ever supplies replacement text. That split is
-// what makes editing safe: scoring and the submit route's validator read
-// the structural constants directly, so no edit here can change a score,
-// invalidate a past submission, or break validation.
+// The database now owns the published question set: which questions
+// exist, their ids, their gap, how many rating levels each has, and every
+// level's label/description/value. lib/questions.ts is no longer the
+// runtime source of truth -- it is the factory default, both the seed
+// data for a fresh install and the fallback whenever the database is
+// unreachable or holds something invalid. Every value this file READS out
+// of the database passes through validateQuestionSet (lib/questionSet.ts,
+// via resolveQuestions below) before it is trusted; nothing here derives
+// tiers from unvalidated input.
 //
-// The merge is deliberately total. Any override that is unrecognised,
-// malformed, or incomplete is ignored in favour of the default rather
-// than throwing. One bad row must not be able to take the assessment
-// down for every prospect.
+// The fallback chain is the safety-critical part of this file, but it
+// only covers the READ paths (resolveQuestions, getPublishedQuestions,
+// getQuestionsForVersion, getDraftQuestions): a missing table, a read
+// error, or an invalid stored set must all degrade to the factory
+// questions (optionally with lingering QuestionOverride wording layered
+// on, see getPublishedQuestions) rather than breaking the assessment for
+// every prospect. That is not theoretical -- a missing table caused a
+// real production outage here.
+//
+// seedDraftQuestions is deliberately exempt from that promise: it is a
+// WRITE path, and its contract requires a real, non-nullable Date back.
+// There is no honest degraded value for that -- fabricating one would
+// poison Task 7's optimistic-concurrency check -- so it throws instead of
+// swallowing a database failure. See its own comment below.
 
 export interface QuestionOverrideRow {
   questionId: string;
@@ -46,7 +67,9 @@ function usableLevels(raw: unknown): { label: string; description: string }[] | 
 }
 
 // Pure: no database, no environment. Takes the defaults and the override
-// rows and returns a new array, leaving its inputs untouched.
+// rows and returns a new array, leaving its inputs untouched. Retained
+// only for seedDraftQuestions, the one-time migration path off the old
+// QuestionOverride table.
 export function mergeQuestions(
   defaults: Question[],
   overrides: QuestionOverrideRow[]
@@ -82,15 +105,231 @@ export function mergeQuestions(
   });
 }
 
-// Reads the overrides and applies them. Falls back to the untouched
-// defaults if the read fails, so a database problem degrades the wording
-// rather than breaking the assessment.
-export async function getResolvedQuestions(): Promise<Question[]> {
+// Pure: validate, then derive tiers. Never throws -- returns null for
+// anything that fails validateQuestionSet, including a shape that isn't
+// even an array. Order matters here: withDerivedTiers has no runtime
+// guard of its own (it throws on a question with fewer than two levels),
+// so it must never run on unvalidated input.
+export function resolveQuestions(raw: unknown): Question[] | null {
+  const result = validateQuestionSet(raw);
+  if (!result.ok) return null;
+  return withDerivedTiers(result.questions);
+}
+
+// The factory set with any still-live QuestionOverride wording layered on
+// top. Used only when there is no published version to prefer instead --
+// no row yet, or the row that exists is invalid.
+//
+// This closes a regression window opened by adding versioned publishing:
+// before it existed, the public assessment read QuestionOverride rows
+// directly, so wording edits already live in production drove what a
+// prospect saw. If "no published version" fell straight through to bare
+// QUESTIONS, every one of those edits would be silently reverted the
+// moment this shipped, for every prospect, until the first publish --
+// while the admin UI kept showing them as saved. Merging overrides in
+// here preserves that wording across the gap. Once a version is
+// published (seeded from these same overrides, see seedDraftQuestions),
+// that version wins outright and this stops being consulted.
+//
+// The override read is wrapped in its own try/catch, independent of the
+// caller's, so a second table failure here still degrades all the way to
+// the untouched factory defaults rather than throwing past this helper.
+async function factoryWithOverrides(): Promise<Question[]> {
   try {
     const overrides = await db.questionOverride.findMany();
-    return mergeQuestions(QUESTIONS, overrides as QuestionOverrideRow[]);
+    return withDerivedTiers(
+      toStored(mergeQuestions(QUESTIONS, overrides as QuestionOverrideRow[]))
+    );
   } catch (e) {
-    console.error("Failed to read question overrides, using defaults:", e);
+    console.error(
+      "Failed to read question overrides while falling back to the factory set; using untouched defaults:",
+      e
+    );
     return QUESTIONS;
   }
+}
+
+// The live assessment reads this. Serves the highest-numbered published
+// version, falling back to the factory question set (with any lingering
+// override wording applied, see factoryWithOverrides) -- and logging why
+// -- on a missing row, a read error, or a stored set that fails
+// validation.
+export async function getPublishedQuestions(): Promise<{
+  questions: Question[];
+  version: number | null;
+}> {
+  try {
+    const row = await db.questionSetVersion.findFirst({
+      orderBy: { version: "desc" },
+    });
+
+    if (!row) {
+      return { questions: await factoryWithOverrides(), version: null };
+    }
+
+    const questions = resolveQuestions(row.questions);
+    if (!questions) {
+      console.error(
+        `Published question set version ${row.version} failed validation; serving the factory questions instead.`
+      );
+      return { questions: await factoryWithOverrides(), version: null };
+    }
+
+    return { questions, version: row.version };
+  } catch (e) {
+    console.error("Failed to read the published question set, using the factory defaults:", e);
+    return { questions: await factoryWithOverrides(), version: null };
+  }
+}
+
+// Resolves the EXACT question set a specific published version
+// represented -- independent of whatever getPublishedQuestions would
+// report right now. /api/submit uses this instead of getPublishedQuestions
+// when a version traveled with the request, so a submission is always
+// scored against what the respondent actually loaded, not whatever
+// happens to be live if a publish landed mid-assessment.
+//
+// version === null describes only the "nothing has ever been published"
+// state a prospect could have loaded before the very first publish.
+// factoryWithOverrides() is safe to recompute later for that case because
+// nothing writes to QuestionOverride any more (that write path was
+// retired by the versioned editor, see the file header above) -- it is
+// frozen, deterministic input, so calling it again reproduces
+// byte-for-byte what was served at load time even if a publish has
+// happened since.
+//
+// Returns null (never throws) when the version cannot be resolved: no
+// such row, a row that fails validation, or a read error. The caller must
+// treat that as "this run can no longer be trusted to score against what
+// the respondent saw" rather than silently falling back to a different
+// question set.
+export async function getQuestionsForVersion(
+  version: number | null
+): Promise<Question[] | null> {
+  if (version === null) {
+    return factoryWithOverrides();
+  }
+
+  try {
+    const row = await db.questionSetVersion.findUnique({ where: { version } });
+    if (!row) return null;
+
+    const questions = resolveQuestions(row.questions);
+    if (!questions) {
+      console.error(`Question set version ${version} failed validation.`);
+      return null;
+    }
+    return questions;
+  } catch (e) {
+    console.error(`Failed to read question set version ${version}:`, e);
+    return null;
+  }
+}
+
+// The admin editor reads this. Serves the "draft" row when it exists and
+// validates; otherwise falls back to the current published set, then to
+// the factory default.
+//
+// `source` says which of those three actually produced `questions`, and
+// exists because `updatedAt: null` is otherwise ambiguous in a way that
+// matters: it is null both when no draft was ever written AND when a
+// draft row exists but is unreadable (fails validation, or the read
+// itself throws). Those are not the same situation -- one has nothing to
+// conflict with, the other has real content Task 7's 409
+// optimistic-concurrency check must not silently treat as absent (and
+// whose stale timestamp must not leak through either, since it cannot be
+// trusted to describe content nobody could parse). `source` lets a caller
+// tell those apart and say "your draft could not be read, showing the
+// live version instead" instead of pretending no draft exists.
+export async function getDraftQuestions(): Promise<{
+  questions: Question[];
+  updatedAt: Date | null;
+  source: "draft" | "published" | "factory";
+}> {
+  try {
+    const row = await db.questionDraft.findUnique({ where: { id: "draft" } });
+    if (row) {
+      const questions = resolveQuestions(row.questions);
+      if (questions) {
+        return { questions, updatedAt: row.updatedAt, source: "draft" };
+      }
+      console.error(
+        "Draft question set failed validation; falling back to the published set."
+      );
+      // The row EXISTS but couldn't be read cleanly -- report source
+      // "draft" (with updatedAt still null) so a caller can tell this
+      // apart from "no draft was ever written". The CONTENT served is
+      // still the safe published/factory fallback below; only the
+      // reported source changes, since that is the one signal that lets
+      // Task 7's editor warn "your draft could not be read" instead of
+      // silently treating a corrupt row as if nothing were there to
+      // conflict with.
+      const published = await getPublishedQuestions();
+      return { questions: published.questions, updatedAt: null, source: "draft" };
+    }
+  } catch (e) {
+    console.error("Failed to read the draft question set, falling back to the published set:", e);
+  }
+
+  const published = await getPublishedQuestions();
+  return {
+    questions: published.questions,
+    updatedAt: null,
+    source: published.version === null ? "factory" : "published",
+  };
+}
+
+// The one-time migration off the old QuestionOverride table, and the
+// draft's lazy initializer: if a draft row already exists AND validates,
+// return it as-is. Otherwise (no row, or a row that fails validation --
+// hand-edited, a partial write) seed one -- from the highest published
+// version if there is one, or else from the code defaults merged with
+// any lingering QuestionOverride rows, so wording edits made before this
+// table existed carry forward -- write it, and return what was written.
+// A corrupt existing row is deliberately overwritten by this reseed
+// rather than merely reported: this function IS the admin editor's
+// entry point, so refusing to repair a corrupt row here would leave the
+// admin unable to fix it through the only tool meant to fix it.
+//
+// This function throws rather than degrading. Every other exported
+// function in this file has an honest fallback value to hand back on a
+// database failure; this one does not -- its contract is a real,
+// non-nullable Date, and a write path fabricating one would poison Task
+// 7's optimistic-concurrency check (worse than surfacing the failure).
+// Callers must handle the rejection themselves.
+export async function seedDraftQuestions(): Promise<{
+  questions: StoredQuestion[];
+  updatedAt: Date;
+}> {
+  const existing = await db.questionDraft.findUnique({ where: { id: "draft" } });
+  if (existing) {
+    const questions = resolveQuestions(existing.questions);
+    if (questions) {
+      return { questions: toStored(questions), updatedAt: existing.updatedAt };
+    }
+    console.error(
+      "Draft question set failed validation while seeding; reseeding and overwriting the corrupt row."
+    );
+  }
+
+  const publishedRow = await db.questionSetVersion.findFirst({
+    orderBy: { version: "desc" },
+  });
+
+  let seedQuestions: StoredQuestion[];
+  if (publishedRow) {
+    const resolved = resolveQuestions(publishedRow.questions);
+    seedQuestions = resolved ? toStored(resolved) : factoryQuestionSet();
+  } else {
+    const overrides = await db.questionOverride.findMany();
+    seedQuestions = toStored(mergeQuestions(QUESTIONS, overrides as QuestionOverrideRow[]));
+  }
+
+  const written = await db.questionDraft.upsert({
+    where: { id: "draft" },
+    create: { id: "draft", questions: seedQuestions as unknown as Prisma.InputJsonValue },
+    update: { questions: seedQuestions as unknown as Prisma.InputJsonValue },
+  });
+
+  return { questions: seedQuestions, updatedAt: written.updatedAt };
 }

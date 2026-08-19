@@ -47,6 +47,22 @@ model Submission {
   overallScore    Int
   readinessBand   String
 
+  // Which published question set this run answered. Null means the
+  // factory default, including every run taken before versioning existed.
+  questionSetVersion Int?
+
+  // The LITERAL question set (id, gap, statement, levels, tiers) the
+  // respondent was scored against, stored on the row itself -- see
+  // lib/questionSet.ts's StoredQuestion/toStored. This makes every
+  // submission self-describing: no join back to QuestionSetVersion is
+  // ever required to know what was asked, and a null questionSetVersion
+  // (the factory default) is no longer ambiguous, because the actual
+  // content travels with the row regardless of whether that version
+  // could later be resolved. Null on old rows written before this
+  // column existed is honest -- we don't know what they saw and don't
+  // backfill a guess.
+  questionSetSnapshot Json?
+
   @@map("submissions")
 }
 
@@ -87,4 +103,28 @@ model RateLimit {
   windowStart DateTime
 
   @@map("rate_limits")
+}
+
+// The single mutable working copy of the question set. Every write
+// upserts against the literal id "draft", so a second row is not
+// reachable through the API. Nothing here is live until it is published.
+model QuestionDraft {
+  id        String   @id @default("draft")
+  questions Json
+  updatedAt DateTime @updatedAt
+
+  @@map("question_draft")
+}
+
+// Published snapshots, append-only. The highest version is what the
+// public assessment serves. Rolling back appends a new version carrying
+// an older one's content rather than deleting rows, so this stays a true
+// log of what was live and when.
+model QuestionSetVersion {
+  version     Int      @id
+  questions   Json
+  note        String?
+  publishedAt DateTime @default(now())
+
+  @@map("question_set_versions")
 }
