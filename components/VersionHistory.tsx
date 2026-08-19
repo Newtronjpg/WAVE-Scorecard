@@ -36,6 +36,7 @@ export function VersionHistory({
   const [loading, setLoading] = useState(false);
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const [armedVersion, setArmedVersion] = useState<number | null>(null);
   const [rollingBackVersion, setRollingBackVersion] = useState<number | null>(
@@ -94,6 +95,7 @@ export function VersionHistory({
   async function confirmRollback(version: number) {
     setRollingBackVersion(version);
     setError(null);
+    setMessage(null);
     try {
       const res = await fetch("/api/admin/questions/rollback", {
         method: "POST",
@@ -109,6 +111,15 @@ export function VersionHistory({
 
       const data = await res.json();
       onRolledBack(data.version);
+      // Rollback only ever changes what's LIVE -- it never touches the
+      // draft, on purpose: an in-progress edit here shouldn't be silently
+      // wiped out by an emergency rollback someone else triggers. That
+      // means the editor's own content can look completely unchanged
+      // right after a real, successful rollback, which reads as "this
+      // isn't working" if nothing says otherwise.
+      setMessage(
+        `Version ${data.version} is now live. Your draft here is unaffected -- use "Load what's live into draft" above if you want the editor to match.`
+      );
       // Force a re-fetch so the list picks up the new version row (its
       // real note and timestamp) rather than guessing at its shape here.
       setLoaded(false);
@@ -186,6 +197,12 @@ export function VersionHistory({
           {error && (
             <p role="alert" className="text-sm text-red">
               {error}
+            </p>
+          )}
+
+          {message && (
+            <p role="status" className="text-sm text-ink">
+              {message}
             </p>
           )}
 

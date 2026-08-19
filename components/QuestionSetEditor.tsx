@@ -61,6 +61,7 @@ export function QuestionSetEditor({
   const [publishArmed, setPublishArmed] = useState(false);
   const [publishNote, setPublishNote] = useState("");
   const [resetArmed, setResetArmed] = useState(false);
+  const [resetLiveArmed, setResetLiveArmed] = useState(false);
   // Two-step confirm for Reload/Discard, matching DeleteSubmissionButton's
   // arm-then-confirm-within-4s pattern -- both actions can silently
   // destroy unsaved edits with a single click otherwise. Reload only
@@ -258,7 +259,7 @@ export function QuestionSetEditor({
     }
   }
 
-  async function confirmReset() {
+  async function confirmReset(to: "live" | "factory") {
     setBusyAction("reset");
     clearTransient();
 
@@ -266,7 +267,7 @@ export function QuestionSetEditor({
       const res = await fetch("/api/admin/questions/reset-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: "factory" }),
+        body: JSON.stringify({ to }),
       });
 
       if (!res.ok) {
@@ -274,10 +275,12 @@ export function QuestionSetEditor({
         setError(data?.error ?? "Could not reset. Please try again.");
         setBusyAction(null);
         setResetArmed(false);
+        setResetLiveArmed(false);
         return;
       }
 
       setResetArmed(false);
+      setResetLiveArmed(false);
       // reset-draft doesn't return the new content, only { ok: true } --
       // read it back so the editor shows exactly what's now persisted.
       // reloadDraft manages its own busyAction lifecycle end-to-end (and
@@ -292,6 +295,7 @@ export function QuestionSetEditor({
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
       setResetArmed(false);
+      setResetLiveArmed(false);
     }
   }
 
@@ -401,6 +405,17 @@ export function QuestionSetEditor({
             {discardArmed ? "Confirm? This discards your unsaved edits" : "Discard changes"}
           </button>
 
+          {!resetLiveArmed && (
+            <button
+              type="button"
+              onClick={() => setResetLiveArmed(true)}
+              disabled={busy}
+              className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Load what&rsquo;s live into draft
+            </button>
+          )}
+
           {!resetArmed && (
             <button
               type="button"
@@ -428,6 +443,36 @@ export function QuestionSetEditor({
           these edits.
         </p>
 
+        {resetLiveArmed && (
+          <div className="mt-3 rounded-md border border-maroon p-3">
+            <p className="text-sm text-ink">
+              This throws away the current draft (including anything
+              unsaved) and replaces it with whatever&rsquo;s currently live
+              -- version {publishedVersion ?? "none"}. Use this after a
+              rollback or a publish elsewhere if you want the editor to
+              match what a prospect actually sees right now.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => confirmReset("live")}
+                disabled={busy}
+                className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 cursor-pointer"
+              >
+                {busyAction === "reset" ? "Loading…" : "Confirm"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setResetLiveArmed(false)}
+                disabled={busy}
+                className="rounded-md border border-line px-4 py-2 text-sm text-ink-muted hover:text-ink cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {resetArmed && (
           <div className="mt-3 rounded-md border border-maroon p-3">
             <p className="text-sm text-ink">
@@ -439,7 +484,7 @@ export function QuestionSetEditor({
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
-                onClick={confirmReset}
+                onClick={() => confirmReset("factory")}
                 disabled={busy}
                 className="rounded-md bg-maroon px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 cursor-pointer"
               >
