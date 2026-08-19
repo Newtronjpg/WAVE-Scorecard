@@ -237,7 +237,7 @@ export function QuestionRow({
                 setDraggedChoiceIndex(null);
               }}
             >
-              <div className="mt-2 flex shrink-0 flex-col items-center gap-1">
+              <div className="mt-2 flex w-8 shrink-0 flex-col items-center gap-1">
                 <span
                   draggable
                   onDragStart={() => setDraggedChoiceIndex(index)}
@@ -287,13 +287,16 @@ export function QuestionRow({
           ))}
 
           {question.levels.length < MAX_LEVELS && (
-            <button
-              type="button"
-              onClick={addChoice}
-              className="mt-2 rounded-md border border-dashed border-line px-3 py-1 text-xs text-ink-muted hover:border-maroon hover:text-maroon cursor-pointer"
-            >
-              + Add choice
-            </button>
+            <div className="mt-2 flex items-start gap-2">
+              <span className="w-8 shrink-0" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={addChoice}
+                className="rounded-md border border-dashed border-line px-3 py-1 text-xs text-ink-muted hover:border-maroon hover:text-maroon cursor-pointer"
+              >
+                + Add choice
+              </button>
+            </div>
           )}
         </div>
       )}
