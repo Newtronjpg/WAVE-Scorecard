@@ -6,8 +6,11 @@ export async function GET() {
   const submissions = await db.submission.findMany({
     orderBy: { createdAt: "desc" },
   });
+  const versions = await db.questionSetVersion.findMany({
+    orderBy: { version: "asc" },
+  });
 
-  const buffer = await buildSubmissionsWorkbook(submissions);
+  const buffer = await buildSubmissionsWorkbook(submissions, versions);
   const filename = `wave-scorecard-submissions-${new Date()
     .toISOString()
     .slice(0, 10)}.xlsx`;
