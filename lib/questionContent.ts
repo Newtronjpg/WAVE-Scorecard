@@ -170,7 +170,7 @@ export async function getPublishedQuestions(): Promise<{
     const questions = resolveQuestions(row.questions);
     if (!questions) {
       console.error(
-        `Published question set version ${row.version} failed validation; serving the factory questions instead.`
+        "Published question set version %o failed validation; serving the factory questions instead.", row.version
       );
       return { questions: await factoryWithOverrides(), version: null };
     }
@@ -216,12 +216,12 @@ export async function getQuestionsForVersion(
 
     const questions = resolveQuestions(row.questions);
     if (!questions) {
-      console.error(`Question set version ${version} failed validation.`);
+      console.error("Question set version %o failed validation.", version);
       return null;
     }
     return questions;
   } catch (e) {
-    console.error(`Failed to read question set version ${version}:`, e);
+    console.error("Failed to read question set version %o:", version, e);
     return null;
   }
 }
