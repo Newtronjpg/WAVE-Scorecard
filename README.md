@@ -1,7 +1,7 @@
 # WAVE Scorecard
 
 A transaction-readiness assessment tool built for an advisory firm's client
-intake process. A prospect answers 28 statements across four gaps (Wealth,
+intake process. A prospect answers 10-30 statements across four gaps (Wealth,
 Accounting, Value, Earnings), each rated against its own specific rubric
 rather than a single generic scale, and receives a scored readiness report
 immediately. Every submission is saved and reviewable by firm staff as a
