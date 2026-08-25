@@ -56,7 +56,7 @@ export async function getSetting(key: string): Promise<string | null> {
   } catch (e) {
     // A settings read must never take down the page that uses it. Falling
     // back to the environment variable is the correct degraded behaviour.
-    console.error(`Failed to read setting "${key}":`, e);
+    console.error('Failed to read setting "%s":', key, e);
     return null;
   }
 }
