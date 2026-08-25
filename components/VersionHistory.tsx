@@ -229,15 +229,6 @@ export function VersionHistory({
       >
         {open ? "Hide version history" : "Version history"}
       </button>
-      <p className="mt-1 text-xs text-ink-muted">
-        A bad publish is one click to undo -- roll back to any earlier
-        version below. This appends a new version carrying that one&rsquo;s
-        content forward; it does not delete anything from history. Delete
-        removes a version outright -- for one that was never meant to exist,
-        not for undoing a real publish. Past submissions are unaffected
-        either way; each keeps its own copy of exactly what it was scored
-        against.
-      </p>
 
       {open && (
         <div className="mt-3">
