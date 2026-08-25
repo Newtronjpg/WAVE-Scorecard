@@ -40,6 +40,11 @@ yarn-error.log*
 # local Claude Code dev-server launch config (personal, not project config)
 .claude/
 
+# AI-agent working notes and planning docs (dev-time only, not part of the shipped project)
+CLAUDE.md
+AGENTS.md
+docs/superpowers/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
