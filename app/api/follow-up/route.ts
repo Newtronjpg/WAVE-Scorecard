@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { checkRateLimit, clientIdentifier } from "@/lib/rateLimit";
+import {
+  FOLLOW_UP_MAX_PER_WINDOW,
+  checkRateLimit,
+  clientIdentifier,
+  followUpKey,
+} from "@/lib/rateLimit";
 import { resolveAdminUrl, sendFollowUpRequest } from "@/lib/email";
 import { getNotifyRecipients } from "@/lib/settings";
 
@@ -32,8 +37,13 @@ const FAILURE = { error: "Could not record your answer." };
 
 export async function POST(req: NextRequest) {
   // Throttled for the same reason /api/submit is: public, and a "yes"
-  // sends an email.
-  const limit = await checkRateLimit(clientIdentifier(req.headers));
+  // sends an email. Its OWN bucket though -- sharing submit's would mean
+  // one office IP got half as many assessments, and could throttle a
+  // respondent out of answering right after their submission succeeded.
+  const limit = await checkRateLimit(
+    followUpKey(clientIdentifier(req.headers)),
+    FOLLOW_UP_MAX_PER_WINDOW
+  );
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests from this connection. Please try again later." },

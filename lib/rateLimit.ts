@@ -13,6 +13,24 @@ import { db } from "./db";
 export const SUBMIT_MAX_PER_WINDOW = 10;
 export const SUBMIT_WINDOW_MS = 60 * 60 * 1000; // one hour
 
+// The follow-up answer gets its own bucket, not a share of the submit
+// budget. Two reasons. Several people at one company sit behind one
+// office IP, and charging each of them two requests instead of one would
+// halve how many can take the assessment from the same building. And a
+// respondent who submitted successfully must never then be throttled out
+// of answering "yes, I'd like to talk" -- that is the single most
+// valuable moment in the whole flow, and it would fail silently.
+//
+// Higher ceiling because the write is cheap: one boolean on one existing
+// row, and only a "yes" sends mail.
+export const FOLLOW_UP_MAX_PER_WINDOW = 30;
+
+// Namespaces the counter so it cannot collide with the submit bucket,
+// which is keyed on the bare client identifier.
+export function followUpKey(clientId: string): string {
+  return `followup:${clientId}`;
+}
+
 export interface WindowState {
   count: number;
   windowStart: Date;

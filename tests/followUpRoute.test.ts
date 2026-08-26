@@ -9,12 +9,13 @@ import { NextRequest } from "next/server";
 
 const updateMock = vi.fn();
 const followUpMock = vi.fn();
+const rateLimitFindUnique = vi.fn().mockResolvedValue(null);
 
 vi.mock("@/lib/db", () => ({
   db: {
     submission: { update: (...args: unknown[]) => updateMock(...args) },
     rateLimit: {
-      findUnique: vi.fn().mockResolvedValue(null),
+      findUnique: (...args: unknown[]) => rateLimitFindUnique(...args),
       upsert: vi.fn().mockResolvedValue({}),
     },
     setting: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -45,10 +46,24 @@ const ROW = {
 
 beforeEach(() => {
   updateMock.mockReset().mockResolvedValue(ROW);
+  rateLimitFindUnique.mockClear();
   followUpMock.mockReset().mockResolvedValue({ sent: true });
 });
 
 describe("POST /api/follow-up", () => {
+  it("throttles on its own bucket, not the submit one", async () => {
+    // Otherwise one office IP gets half as many assessments, and someone
+    // can be blocked from answering right after submitting successfully.
+    const { followUpKey } = await import("@/lib/rateLimit");
+    const { POST } = await import("@/app/api/follow-up/route");
+    await POST(request({ submissionId: "sub-1", interested: true }) as never);
+
+    expect(rateLimitFindUnique).toHaveBeenCalled();
+    const key = rateLimitFindUnique.mock.calls[0][0].where.key;
+    expect(key.startsWith("followup:")).toBe(true);
+    expect(key).toBe(followUpKey(key.slice("followup:".length)));
+  });
+
   it("records a yes against the submission it names", async () => {
     const { POST } = await import("@/app/api/follow-up/route");
     const res = await POST(request({ submissionId: "sub-1", interested: true }) as never);
