@@ -6,6 +6,7 @@ import { NotifySettings } from "@/components/NotifySettings";
 import { DeleteSubmissionButton } from "@/components/DeleteSubmissionButton";
 import { ADMIN_COOKIE_NAME, matchAdminUser } from "@/lib/adminAuth";
 import { getNotifyRecipientsRaw } from "@/lib/settings";
+import { commentCount } from "@/lib/comments";
 
 export const dynamic = "force-dynamic";
 
@@ -111,7 +112,28 @@ export default async function AdminPage() {
                   {s.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                 </td>
                 <td className="px-3 py-2">{s.prospectName ?? "-"}</td>
-                <td className="px-3 py-2">{s.companyName ?? "-"}</td>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    {s.companyName ?? "-"}
+                    {commentCount(s.comments) > 0 && (
+                      // The notes themselves only exist in the per-run
+                      // export, so without a marker here nobody knows there
+                      // is anything to open.
+                      <span
+                        title={`${commentCount(s.comments)} ${
+                          commentCount(s.comments) === 1 ? "question has" : "questions have"
+                        } added context, see the export`}
+                        aria-label={`${commentCount(s.comments)} ${
+                          commentCount(s.comments) === 1 ? "question has" : "questions have"
+                        } added context`}
+                        className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--color-tint)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-maroon"
+                      >
+                        <span aria-hidden="true">&#9998;</span>
+                        {commentCount(s.comments)}
+                      </span>
+                    )}
+                  </span>
+                </td>
                 <td className="px-3 py-2 text-right">{s.wealthScore}</td>
                 <td className="px-3 py-2 text-right">{s.accountingScore}</td>
                 <td className="px-3 py-2 text-right">{s.valueScore}</td>

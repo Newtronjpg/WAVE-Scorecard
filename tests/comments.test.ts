@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MAX_COMMENT_LENGTH,
+  commentCount,
   commentsMap,
   normalizeComments,
 } from "../lib/comments";
@@ -63,3 +64,18 @@ describe("commentsMap", () => {
     expect(commentsMap(["a"])).toEqual({});
   });
 });
+
+describe("commentCount", () => {
+  it("counts the questions a run has context for", () => {
+    expect(commentCount({ W1: "a", W2: "b" })).toBe(2);
+    expect(commentCount({ W1: "a" })).toBe(1);
+  });
+
+  it("treats every absent shape as zero, so the admin badge stays hidden", () => {
+    expect(commentCount(null)).toBe(0);
+    expect(commentCount(undefined)).toBe(0);
+    expect(commentCount({})).toBe(0);
+    expect(commentCount("nope")).toBe(0);
+    expect(commentCount(["a"])).toBe(0);
+  });
+})

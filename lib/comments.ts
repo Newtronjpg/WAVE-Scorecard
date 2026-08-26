@@ -52,6 +52,15 @@ export function normalizeComments(
   return Object.keys(out).length > 0 ? out : null;
 }
 
+// How many questions a submission carries context for. Used by the admin
+// table to show that a run has notes worth opening the export for.
+export function commentCount(comments: unknown): number {
+  if (comments === null || typeof comments !== "object" || Array.isArray(comments)) {
+    return 0;
+  }
+  return Object.keys(comments as Record<string, unknown>).length;
+}
+
 // Narrows the Json column to something indexable by question id. Prisma
 // types Json as unknown-ish, and every reader wants the same shape.
 export function commentsMap(comments: unknown): Record<string, string> {

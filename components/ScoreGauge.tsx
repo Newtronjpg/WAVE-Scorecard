@@ -137,8 +137,11 @@ export function ScoreGauge({
             fill="var(--color-ink)"
           />
         </g>
-        <circle cx={CENTER_X} cy={CENTER_Y} r="7" fill="var(--color-ink)" />
-        <circle cx={CENTER_X} cy={CENTER_Y} r="2.5" fill="var(--color-paper)" />
+        {/* One solid pivot. This used to be a dark circle with a small
+            paper-colored dot inside it; at the size the dial actually
+            renders, that inner dot read as a hole punched in the hub
+            rather than as a bearing. */}
+        <circle cx={CENTER_X} cy={CENTER_Y} r="6" fill="var(--color-ink)" />
       </g>
     </svg>
   );
