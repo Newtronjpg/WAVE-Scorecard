@@ -175,11 +175,17 @@ export function Assessment({
 
         <div className="mt-6 flex flex-col items-center">
           <ScoreGauge score={result.overallScore} />
-          <span className="mt-2 inline-block rounded-full bg-[var(--color-tint)] px-3 py-1 text-xs font-medium text-ink">
-            {result.band.label}
-          </span>
+          <div className="mt-2 rounded-2xl bg-[var(--color-tint)] px-5 py-2 text-center">
+            <span className="block font-display text-2xl text-ink leading-none">
+              {result.overallScore}
+              <span className="text-sm text-ink-muted">/100</span>
+            </span>
+            <span className="mt-1 block text-xs font-medium tracking-wide text-ink">
+              {result.band.label}
+            </span>
+          </div>
         </div>
-        <p className="mt-3 text-sm text-ink-muted leading-relaxed max-w-md">
+        <p className="mt-3 mx-auto max-w-md text-center text-sm text-ink-muted leading-relaxed">
           {result.band.description}
         </p>
 
