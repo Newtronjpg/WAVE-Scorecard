@@ -15,7 +15,20 @@ export type ValidationResult =
 // Deliberately conservative: no spaces, exactly one @, a dot-bearing
 // domain. This validates addresses typed into a form by hand, where the
 // realistic failure is a typo, not an exotic-but-legal RFC 5322 address.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+//
+// Plain string checks rather than a single regex: a pattern like
+// /^[^\s@]+@[^\s@]+\.[^\s@]+$/ lets the two [^\s@]+ groups and the
+// literal "." re-split the same input many ways when the match fails,
+// which is polynomial-time backtracking on adversarial input (e.g. many
+// repeated "!." segments with no valid ending).
+function isPlausibleEmail(value: string): boolean {
+  if (value.length === 0 || /\s/.test(value)) return false;
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@")) return false;
+  const domain = value.slice(at + 1);
+  const dot = domain.indexOf(".");
+  return dot > 0 && dot < domain.length - 1;
+}
 
 // Validates a comma-separated recipient list and returns it normalized.
 //
@@ -35,7 +48,7 @@ export function validateRecipients(raw: string): ValidationResult {
   if (entries.length === 0) return { ok: true, value: "" };
 
   for (const entry of entries) {
-    if (!EMAIL_PATTERN.test(entry)) {
+    if (!isPlausibleEmail(entry)) {
       return { ok: false, error: `"${entry}" is not a valid email address.` };
     }
   }
