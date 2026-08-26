@@ -120,7 +120,7 @@ describe("scoreAssessment", () => {
     expect(value.score).toBe(50);
     expect(earnings.score).toBe(57); // (25+75+50+25+50+100+75)/7 = 57.14 -> 57
     expect(result.overallScore).toBe(58);
-    expect(result.band.label).toBe("Meaningful gaps");
+    expect(result.band.label).toBe("Good");
     expect(result.widestGap.gap).toBe("wealth"); // tied with value at 50; wealth comes first
   });
 
@@ -128,14 +128,14 @@ describe("scoreAssessment", () => {
     const result = scoreAssessment(allAnswers(5));
     expect(result.overallScore).toBe(100);
     for (const g of result.gaps) expect(g.score).toBe(100);
-    expect(result.band.label).toBe("Transaction ready");
+    expect(result.band.label).toBe("Great");
   });
 
   it("scores the worst possible assessment as 0 with the bottom band", () => {
     const result = scoreAssessment(allAnswers(1));
     expect(result.overallScore).toBe(0);
     for (const g of result.gaps) expect(g.score).toBe(0);
-    expect(result.band.label).toBe("Significant gaps");
+    expect(result.band.label).toBe("Poor");
   });
 
   it("computes gapToClose as 100 minus the score for every gap", () => {
@@ -182,10 +182,12 @@ describe("bandFor", () => {
   });
 
   it("boundary scores land in the higher band (inclusive floor)", () => {
-    expect(bandFor(40).label).toBe("Meaningful gaps");
-    expect(bandFor(39).label).toBe("Significant gaps");
-    expect(bandFor(60).label).toBe("Minor gaps");
-    expect(bandFor(80).label).toBe("Transaction ready");
+    expect(bandFor(24).label).toBe("Poor");
+    expect(bandFor(25).label).toBe("Fair");
+    expect(bandFor(49).label).toBe("Fair");
+    expect(bandFor(50).label).toBe("Good");
+    expect(bandFor(74).label).toBe("Good");
+    expect(bandFor(75).label).toBe("Great");
   });
 });
 

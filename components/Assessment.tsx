@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { GAPS, type Gap, type Question } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
+import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 
 type ScoreResultShape = {
@@ -172,12 +173,9 @@ export function Assessment({
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap items-baseline gap-4">
-          <span className="font-display text-6xl text-maroon leading-none">
-            {result.overallScore}
-            <span className="text-2xl text-ink-muted">/100</span>
-          </span>
-          <span className="inline-block rounded-full bg-[var(--color-tint)] px-3 py-1 text-xs font-medium text-ink">
+        <div className="mt-6 flex flex-col items-center">
+          <ScoreGauge score={result.overallScore} />
+          <span className="mt-2 inline-block rounded-full bg-[var(--color-tint)] px-3 py-1 text-xs font-medium text-ink">
             {result.band.label}
           </span>
         </div>

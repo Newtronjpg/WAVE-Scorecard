@@ -17,7 +17,7 @@ const ORIGINAL_ENV = {
 function fakeResult(): ScoreResult {
   return {
     overallScore: 58,
-    band: { label: "Meaningful gaps", floor: 40, description: "test" },
+    band: { label: "Good", floor: 50, description: "test" },
     gaps: [
       { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50 },
       { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25 },

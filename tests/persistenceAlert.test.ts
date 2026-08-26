@@ -20,7 +20,7 @@ const ORIGINAL_ENV = {
 function fakeResult(): ScoreResult {
   return {
     overallScore: 58,
-    band: { label: "Meaningful gaps", floor: 40, description: "test" },
+    band: { label: "Good", floor: 50, description: "test" },
     gaps: [
       { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50 },
       { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25 },
@@ -74,8 +74,9 @@ describe("buildPersistenceFailureAlert", () => {
 
   it("includes the computed scores", () => {
     const { text } = buildPersistenceFailureAlert(fakeDetails());
-    expect(text).toContain("58");
-    expect(text).toContain("Meaningful gaps");
+    // Asserted together as one formatted string: "Good" is a common enough
+    // word to pass by accident against the full alert body on its own.
+    expect(text).toContain("58/100 (Good)");
   });
 
   it("handles a non-Error thrown value without crashing", () => {

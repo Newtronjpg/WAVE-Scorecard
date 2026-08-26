@@ -36,34 +36,37 @@ export interface ScoreResult {
   widestGap: GapResult;
 }
 
-// Only one example of the current band scheme survived in the source
-// material (58 -> "Meaningful gaps"). These boundaries are a reasonable,
-// evenly-spaced extrapolation from that single data point. Treat the
-// exact cutoffs and names as a first draft, not gospel; they're
-// defined in one place here so relabeling or re-slicing later is a
-// one-file change, not a hunt through the UI.
+// The four bands the results page speedometer is divided into: an even
+// 25-point slice each, ascending by floor. bandFor picks the last band
+// whose floor a score meets, so the floors read as inclusive lower
+// bounds -- 24 is Poor, 25 is Fair, 74 is Good, 75 is Great.
+//
+// Defined in one place so relabeling or re-slicing later is a one-file
+// change, not a hunt through the UI. lib/gauge.ts colors the arc by
+// INDEX into this array, so reordering these entries reorders the
+// colors with them.
 export const READINESS_BANDS: ReadinessBand[] = [
   {
-    label: "Significant gaps",
+    label: "Poor",
     floor: 0,
     description:
       "There's foundational work to do across most of these areas before a transaction conversation makes sense.",
   },
   {
-    label: "Meaningful gaps",
-    floor: 40,
+    label: "Fair",
+    floor: 25,
     description:
       "This is where most owners sit, and where starting three to seven years early pays off the most. There is real, fixable work between you and your number.",
   },
   {
-    label: "Minor gaps",
-    floor: 60,
+    label: "Good",
+    floor: 50,
     description:
       "The fundamentals are largely in place. What's left is closing specific, identifiable gaps rather than starting from scratch.",
   },
   {
-    label: "Transaction ready",
-    floor: 80,
+    label: "Great",
+    floor: 75,
     description:
       "The business is in strong position for a transaction conversation whenever you're ready to have it.",
   },

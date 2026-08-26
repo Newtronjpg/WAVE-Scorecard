@@ -26,7 +26,7 @@ function fakeSubmission(overrides: Record<string, unknown> = {}) {
     valueScore: 50,
     earningsScore: 57,
     overallScore: 58,
-    readinessBand: "Meaningful gaps",
+    readinessBand: "Good",
     questionSetVersion: null,
     questionSetSnapshot: null,
     ...overrides,

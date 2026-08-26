@@ -28,7 +28,7 @@ function fakeSubmission(overrides: Partial<Submission> = {}): Submission {
     valueScore: 50,
     earningsScore: 57,
     overallScore: 58,
-    readinessBand: "Meaningful gaps",
+    readinessBand: "Good",
     questionSetVersion: 3,
     questionSetSnapshot: null,
     ...overrides,
@@ -276,7 +276,7 @@ describe("buildRunWorkbook", () => {
       prospectName: "Jane Owner",
       companyName: "Acme Fabrication",
       overallScore: 58,
-      readinessBand: "Meaningful gaps",
+      readinessBand: "Good",
       answers: { W1: 3, W2: 1 },
     });
     const buffer = await buildRunWorkbook(submission, fakeRunQuestions(5), "version 3");
@@ -286,7 +286,8 @@ describe("buildRunWorkbook", () => {
     expect(text).toContain("Jane Owner");
     expect(text).toContain("Acme Fabrication");
     expect(text).toContain("58");
-    expect(text).toContain("Meaningful gaps");
+    // Quoted so this matches a whole cell value, not "Good" inside prose.
+    expect(text).toContain('"Good"');
     expect(text).toContain("version 3");
   });
 });
