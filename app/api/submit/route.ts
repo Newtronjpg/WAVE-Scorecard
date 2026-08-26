@@ -217,6 +217,10 @@ export async function POST(req: NextRequest) {
     comments: z
       .record(z.string(), z.string().max(MAX_COMMENT_PAYLOAD_LENGTH))
       .optional(),
+    // Whether they want to talk, asked on the last section. Nullable and
+    // optional: not answering is legal and must never block a submission,
+    // and null stays distinct from an explicit "not at this time".
+    followUpInterest: z.boolean().nullable().optional(),
     // Optional so an older cached client bundle that doesn't send it still
     // works via the live-published fallback above.
     questionSetVersion: z.number().int().nullable().optional(),
@@ -231,6 +235,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { answers, prospectName, companyName, email, industry } = parsed.data;
+  const followUpInterest = parsed.data.followUpInterest ?? null;
   const comments = normalizeComments(
     parsed.data.comments,
     questions.map((q) => q.id)
@@ -257,9 +262,6 @@ export async function POST(req: NextRequest) {
   // Resolved before the write so the failure alert can still reach
   // someone if the write itself is what fails.
   const recipients = await getNotifyRecipients();
-  // Null when the write failed; the results page hides the follow-up
-  // question rather than offering an answer it cannot record.
-  let submissionId: string | null = null;
   let saved = true;
   let notification: { sent: boolean; reason?: string } = {
     sent: false,
@@ -267,12 +269,13 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const created = await db.submission.create({
+    await db.submission.create({
       data: {
         prospectName,
         companyName,
         email,
         industry,
+        followUpInterest,
         answers,
         // null, never {}, when nothing was written -- see lib/comments.ts.
         comments: comments ?? undefined,
@@ -293,11 +296,7 @@ export async function POST(req: NextRequest) {
         // ever unreadable. See prisma/schema.prisma for the full rationale.
         questionSetSnapshot: toStored(questions) as unknown as Prisma.InputJsonValue,
       },
-      // The results page needs this to record the follow-up answer, which
-      // is given after this row already exists.
-      select: { id: true },
     });
-    submissionId = created.id;
   } catch (e) {
     // The person taking the assessment should still see their results
     // even if the save fails -- but a swallowed failure here once lost
@@ -313,6 +312,7 @@ export async function POST(req: NextRequest) {
         companyName,
         email,
         industry,
+        followUpInterest,
         recipients,
         answers,
         comments: comments ?? {},
@@ -341,6 +341,7 @@ export async function POST(req: NextRequest) {
       companyName,
       email,
       industry,
+      followUpInterest,
       result,
       // Without this, context only ever reached staff when a submission
       // FAILED to save -- on the happy path the note sat in the run export
@@ -360,7 +361,7 @@ export async function POST(req: NextRequest) {
   // client. `saved` ships in production too: the client needs it to tell
   // the person their results weren't recorded.
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ ...result, saved, submissionId });
+    return NextResponse.json({ ...result, saved });
   }
-  return NextResponse.json({ ...result, saved, submissionId, _notification: notification });
+  return NextResponse.json({ ...result, saved, _notification: notification });
 }

@@ -229,48 +229,43 @@ describe("sendSubmissionNotification", () => {
   }, 15000);
 });
 
-describe("buildFollowUpRequest", () => {
-  it("names who wants to talk, their score, and how to reach them", async () => {
-    const { buildFollowUpRequest } = await import("@/lib/email");
-    const { subject, text } = buildFollowUpRequest({
+describe("the follow-up answer in the completion email", () => {
+  function details(followUpInterest: boolean | null | undefined) {
+    return {
       prospectName: "Jane Owner",
       companyName: "Acme Fabrication",
       email: "jane@acme.com",
       industry: "Manufacturing",
-      overallScore: 67,
-      readinessBand: "Good",
+      followUpInterest,
+      result: fakeResult(),
       adminUrl: "https://wave.example.com/admin",
-    });
+      answers: { W1: 4 },
+      error: new Error("db down"),
+    };
+  }
 
-    expect(subject).toBe("Jane Owner (Acme Fabrication) wants a conversation");
-    expect(text).toContain("jane@acme.com");
-    expect(text).toContain("Manufacturing");
-    expect(text).toContain("67/100 (Good)");
-    expect(text).toContain("https://wave.example.com/admin");
-  });
-
-  it("says the commitment has already been made, so nobody treats it as optional", async () => {
-    const { buildFollowUpRequest } = await import("@/lib/email");
-    const { text } = buildFollowUpRequest({
-      prospectName: "Jane Owner",
-      companyName: "Acme Fabrication",
-      overallScore: 67,
-      readinessBand: "Good",
-      adminUrl: "https://wave.example.com/admin",
-    });
+  it("calls out a yes, and says the commitment is already made", async () => {
+    const { buildPersistenceFailureAlert } = await import("@/lib/email");
+    const { text } = buildPersistenceFailureAlert(details(true));
+    expect(text).toContain("WANTS A CONVERSATION");
     expect(text).toContain("already been told someone will reach out");
   });
 
-  it("omits contact lines it does not have rather than printing undefined", async () => {
-    const { buildFollowUpRequest } = await import("@/lib/email");
-    const { text } = buildFollowUpRequest({
-      prospectName: "Jane Owner",
-      companyName: "Acme Fabrication",
-      overallScore: 67,
-      readinessBand: "Good",
-      adminUrl: "https://wave.example.com/admin",
-    });
-    expect(text).not.toContain("undefined");
-    expect(text).not.toContain("Email:");
+  it("records an explicit no without shouting about it", async () => {
+    const { buildPersistenceFailureAlert } = await import("@/lib/email");
+    const { text } = buildPersistenceFailureAlert(details(false));
+    expect(text).toContain("not at this time");
+    expect(text).not.toContain("WANTS A CONVERSATION");
+  });
+
+  it("says nothing at all when they never answered", async () => {
+    // Null is not a no; the email must not imply one.
+    const { buildPersistenceFailureAlert } = await import("@/lib/email");
+    for (const value of [null, undefined]) {
+      const { text } = buildPersistenceFailureAlert(details(value));
+      expect(text).not.toContain("WANTS A CONVERSATION");
+      expect(text).not.toContain("not at this time");
+      expect(text).not.toContain("undefined");
+    }
   });
 });

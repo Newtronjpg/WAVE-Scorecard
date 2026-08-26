@@ -796,3 +796,87 @@ describe("POST /api/submit and the respondent's contact details", () => {
     expect(b.gaps).toEqual(a.gaps);
   });
 });
+
+// The follow-up question moved from the results page onto the last
+// section, so the answer travels with the submission and lands in the one
+// completion email instead of arriving separately after it.
+describe("POST /api/submit and the follow-up question", () => {
+  it("persists a yes and puts it in the completion email", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest({ ...validBody, followUpInterest: true }) as never);
+
+    expect(createMock.mock.calls[0][0].data.followUpInterest).toBe(true);
+    expect(notifyMock.mock.calls[0][0].followUpInterest).toBe(true);
+  });
+
+  it("persists an explicit no", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest({ ...validBody, followUpInterest: false }) as never);
+
+    expect(createMock.mock.calls[0][0].data.followUpInterest).toBe(false);
+  });
+
+  it("stores null when they never answered, which is not the same as no", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    expect(createMock.mock.calls[0][0].data.followUpInterest).toBeNull();
+  });
+
+  it("never blocks a submission over the follow-up question", async () => {
+    // It is optional by design; a missing or explicitly null answer must
+    // not cost someone the assessment they just finished.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    for (const value of [undefined, null]) {
+      createMock.mockClear().mockResolvedValue({ id: "abc" });
+      const res = await POST(
+        submitRequest({ ...validBody, followUpInterest: value }) as never
+      );
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("rejects a non-boolean answer rather than coercing it", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(
+      submitRequest({ ...validBody, followUpInterest: "yes" }) as never
+    );
+
+    expect(res.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("carries the answer into the alert when the write fails", async () => {
+    createMock.mockRejectedValue(new Error("db down"));
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest({ ...validBody, followUpInterest: true }) as never);
+
+    expect(alertMock.mock.calls[0][0].followUpInterest).toBe(true);
+  });
+
+  it("no longer returns a submission id, since nothing needs one", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const json = await (await POST(submitRequest(validBody) as never)).json();
+    expect(json.submissionId).toBeUndefined();
+  });
+});

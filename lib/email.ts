@@ -71,6 +71,18 @@ ${entries.map(([id, text]) => `  ${id}: ${text.trim()}`).join("\n")}
 `;
 }
 
+// Rendered as its own line rather than folded in with the contact details:
+// a "yes" is the one thing in this email that needs somebody to act, and
+// the respondent has already been told a call is coming.
+//
+// Null renders nothing at all. "Never answered" and "said not at this
+// time" are different, and only one of them is worth chasing.
+function followUpLine(interest: boolean | null | undefined): string {
+  if (interest === true) return "\nWANTS A CONVERSATION -- they have already been told someone will reach out.\n";
+  if (interest === false) return "\nAsked about a conversation: not at this time.\n";
+  return "";
+}
+
 export interface NotificationDetails {
   prospectName: string;
   companyName: string;
@@ -78,6 +90,8 @@ export interface NotificationDetails {
   // predates these fields still compiles; rendered only when present.
   email?: string;
   industry?: string;
+  // Whether they asked to talk. Null means they did not answer.
+  followUpInterest?: boolean | null;
   result: ScoreResult;
   // Optional free text the respondent attached to individual questions,
   // keyed by question id. Absent or empty renders nothing at all.
@@ -145,6 +159,7 @@ export async function sendSubmissionNotification(
   try {
     const { prospectName, companyName, result } = details;
     const comments = commentSection(details.comments);
+    const followUp = followUpLine(details.followUpInterest);
     const contact = [
       details.email ? `Email:    ${details.email}` : "",
       details.industry ? `Industry: ${details.industry}` : "",
@@ -160,7 +175,7 @@ export async function sendSubmissionNotification(
       config,
       `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
       `${prospectName} at ${companyName} just finished the WAVE Scorecard.
-${contact ? `\n${contact}\n` : ""}
+${followUp}${contact ? `\n${contact}\n` : ""}
 Overall: ${result.overallScore}/100 (${result.band.label})
 
 ${gapLines}
@@ -184,6 +199,7 @@ export interface PersistenceFailureDetails {
   answers: Record<string, number>;
   email?: string;
   industry?: string;
+  followUpInterest?: boolean | null;
   // Optional per-question context. On this path the email is the only
   // surviving copy of the submission, so the respondent's own words have
   // to travel with the ratings or they are gone.
@@ -243,7 +259,7 @@ THIS EMAIL IS THE ONLY COPY OF THIS SUBMISSION. It is not in the admin
 table and it will not appear in the Excel export. Save it somewhere
 before deleting this message.
 
-Prospect: ${prospectName}
+Prospect: ${prospectName}${followUpLine(details.followUpInterest)}
 Company:  ${companyName}${details.email ? `\nEmail:    ${details.email}` : ""}${
       details.industry ? `\nIndustry: ${details.industry}` : ""
     }
@@ -261,68 +277,6 @@ ${outageWarning}
 
 Admin: ${adminUrl}`,
   };
-}
-
-export interface FollowUpRequestDetails {
-  prospectName: string;
-  companyName: string;
-  email?: string;
-  industry?: string;
-  overallScore: number;
-  readinessBand: string;
-  adminUrl: string;
-  recipients?: string[];
-}
-
-// Builds the "they want to talk" email. Kept separate from sending so the
-// content is testable without SMTP, like the other two.
-//
-// This is the only signal staff get that someone opted in: the submission
-// notification is sent before the results page even renders the question.
-export function buildFollowUpRequest(details: FollowUpRequestDetails): {
-  subject: string;
-  text: string;
-} {
-  const { prospectName, companyName, overallScore, readinessBand } = details;
-  const contact = [
-    details.email ? `Email:    ${details.email}` : "",
-    details.industry ? `Industry: ${details.industry}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return {
-    subject: `${prospectName} (${companyName}) wants a conversation`,
-    text: `${prospectName} at ${companyName} finished the WAVE Scorecard and
-asked to discuss the results with someone from the team.
-
-They have already been told someone will reach out to find a convenient
-time, so this is a commitment already made on our behalf.
-
-Score:    ${overallScore}/100 (${readinessBand})
-${contact}
-
-Full submission and export: ${details.adminUrl}`,
-  };
-}
-
-// Never throws, for the same reason the other senders don't: the answer
-// is already recorded, and a mail failure must not surface to the person
-// who just asked to be contacted.
-export async function sendFollowUpRequest(
-  details: FollowUpRequestDetails
-): Promise<{ sent: boolean; reason?: string }> {
-  const config = resolveMailConfig(details.recipients);
-  if (!config) return { sent: false, reason: "not configured" };
-
-  try {
-    const { subject, text } = buildFollowUpRequest(details);
-    await deliver(config, subject, text);
-    return { sent: true };
-  } catch (e) {
-    console.error("Failed to send follow-up request email:", e);
-    return { sent: false, reason: e instanceof Error ? e.message : "unknown error" };
-  }
 }
 
 // Alerts staff that a submission was lost. Mirrors the contract of

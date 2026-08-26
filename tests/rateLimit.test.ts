@@ -151,27 +151,3 @@ describe("clientIdentifier", () => {
     expect(id.length).toBeGreaterThan(0);
   });
 });
-
-describe("follow-up bucket isolation", () => {
-  it("namespaces the follow-up counter away from the submit counter", async () => {
-    const { followUpKey } = await import("@/lib/rateLimit");
-    // Submissions are keyed on the bare client id; sharing that key would
-    // charge one respondent two requests for one assessment.
-    expect(followUpKey("abc123")).not.toBe("abc123");
-    expect(followUpKey("abc123")).toBe("followup:abc123");
-  });
-
-  it("keeps distinct clients in distinct follow-up buckets", async () => {
-    const { followUpKey } = await import("@/lib/rateLimit");
-    expect(followUpKey("abc")).not.toBe(followUpKey("def"));
-  });
-
-  it("allows more follow-up answers than submissions", async () => {
-    // A respondent who submitted must never be throttled out of saying
-    // yes afterwards, and the write is far cheaper than a submission.
-    const { FOLLOW_UP_MAX_PER_WINDOW, SUBMIT_MAX_PER_WINDOW } = await import(
-      "@/lib/rateLimit"
-    );
-    expect(FOLLOW_UP_MAX_PER_WINDOW).toBeGreaterThan(SUBMIT_MAX_PER_WINDOW);
-  });
-});

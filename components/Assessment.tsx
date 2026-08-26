@@ -17,8 +17,6 @@ type ScoreResultShape = {
   // False when the score was computed but could not be written to the
   // database. Optional so an older cached client bundle still renders.
   saved?: boolean;
-  // The row the follow-up answer attaches to. Null when the write failed.
-  submissionId?: string | null;
 };
 
 type View = "intro" | "section" | "submitting" | "results";
@@ -66,6 +64,10 @@ export function Assessment({
   // to one stored string by resolveIndustry at submit time.
   const [industry, setIndustry] = useState("");
   const [industryOther, setIndustryOther] = useState("");
+  // Asked on the last section rather than the results page, so the answer
+  // is part of the submission and lands in the one completion email.
+  // Null means they never answered, which is not the same as "no".
+  const [followUpInterest, setFollowUpInterest] = useState<boolean | null>(null);
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +111,7 @@ export function Assessment({
           companyName: companyName.trim(),
           email: email.trim(),
           industry: resolveIndustry(industry, industryOther),
+          followUpInterest,
           // The version loaded at the top of this component, not
           // whatever might be published by now.
           questionSetVersion: version,
@@ -150,6 +153,7 @@ export function Assessment({
   function handleStartOver() {
     setAnswers({});
     setComments({});
+    setFollowUpInterest(null);
     // Name, company, email, and industry deliberately persist: "Start
     // over" retakes the assessment, it does not become a different
     // person, and re-typing all four is pure friction.
@@ -236,10 +240,6 @@ export function Assessment({
           </p>
         </div>
 
-        {result.submissionId && (
-          <FollowUpPrompt submissionId={result.submissionId} />
-        )}
-
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
           <button
             type="button"
@@ -295,6 +295,13 @@ export function Assessment({
           </div>
         ))}
       </div>
+
+      {sectionIndex === GAPS.length - 1 && (
+        <FollowUpPrompt
+          value={followUpInterest}
+          onChange={setFollowUpInterest}
+        />
+      )}
 
       <div className="mt-10 flex items-center justify-between">
         <button
