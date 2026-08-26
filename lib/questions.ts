@@ -1,20 +1,13 @@
-// The WAVE Scorecard question bank.
+// The WAVE Scorecard factory question bank -- the shipped default and
+// fallback, not the runtime source of truth (see lib/questionContent.ts).
+// Every question defines its own 5-point rubric: each rating is a
+// specific, concrete state of the business, not a point on a generic
+// agreement scale.
 //
-// This file is the actual fix for the core critique of the old version:
-// every question used to share one generic "1 = strongly disagree, 5 =
-// strongly agree" scale. Here, every question defines its own 5-point
-// rubric: each rating is a specific, concrete state of the business, not a
-// point on a generic agreement scale.
-//
-// Tier mapping (this is what lets the existing Action Library / Combo
-// Rules language, e.g. "W1 is Good/Excellent AND W3 is Poor/Fair", keep
-// working against these 1-5 ratings without inventing a second system):
 //   1 -> Poor      2 -> Fair      3 -> Good      4-5 -> Excellent
 //
-// `label` is the short anchor shown on/under each rating button (always
-// visible, so someone can compare all five before picking one).
-// `description` is the full sentence shown once a rating is selected, in
-// the highlighted caption below the question.
+// `label` is the short anchor shown on/under each rating button.
+// `description` is the full sentence shown once a rating is selected.
 
 export type Gap = "wealth" | "accounting" | "value" | "earnings";
 export type Tier = "Poor" | "Fair" | "Good" | "Excellent";
@@ -87,7 +80,7 @@ function levels(
 }
 
 export const QUESTIONS: Question[] = [
-  // ---------------------------------------------------------------- WEALTH
+  // Wealth
   {
     id: "W1",
     gap: "wealth",
@@ -195,7 +188,7 @@ export const QUESTIONS: Question[] = [
     ),
   },
 
-  // ------------------------------------------------------------ ACCOUNTING
+  // Accounting
   {
     id: "A1",
     gap: "accounting",
@@ -302,7 +295,7 @@ export const QUESTIONS: Question[] = [
     ),
   },
 
-  // ----------------------------------------------------------------- VALUE
+  // Value
   {
     id: "V1",
     gap: "value",
@@ -409,7 +402,7 @@ export const QUESTIONS: Question[] = [
     ),
   },
 
-  // -------------------------------------------------------------- EARNINGS
+  // Earnings
   {
     id: "E1",
     gap: "earnings",

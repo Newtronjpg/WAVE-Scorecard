@@ -254,11 +254,11 @@ describe("PUT /api/admin/questions/draft", () => {
   });
 
   it("returns 409 and writes nothing when a draft row exists but updatedAt is omitted", async () => {
-    // RULING A: once a draft row exists, a matching updatedAt is required.
-    // Omitting the field must not be treated as "no conflict possible" --
-    // that is exactly the escape hatch that let a client blind-overwrite a
-    // real (possibly corrupt-and-unreadable) row. See getDraftQuestions's
-    // comment in lib/questionContent.ts on why null is ambiguous.
+    // Once a draft row exists, a matching updatedAt is required. Omitting
+    // the field must not be treated as "no conflict possible" -- that's
+    // the escape hatch that would let a client blind-overwrite a real,
+    // possibly-unreadable row. See getDraftQuestions's comment in
+    // lib/questionContent.ts on why null is ambiguous.
     findUniqueDraftMock.mockResolvedValue({
       id: "draft",
       questions: FACTORY,
@@ -380,10 +380,10 @@ describe("POST /api/admin/questions/publish", () => {
   });
 
   it("refuses with 400 and publishes nothing when there is no draft row", async () => {
-    // RULING B: the fallback to getDraftQuestions() is gone. Publish must
-    // refuse rather than silently ship content the admin never opened
-    // (and that bypasses validateQuestionSet's guarantees, since
-    // factoryWithOverrides is not revalidated).
+    // Publish refuses rather than silently shipping content the admin
+    // never opened -- falling back to getDraftQuestions() here would also
+    // bypass validateQuestionSet's guarantees, since factoryWithOverrides
+    // isn't revalidated.
     findUniqueDraftMock.mockResolvedValue(null);
 
     const { POST } = await import("@/app/api/admin/questions/publish/route");
@@ -461,9 +461,9 @@ describe("POST /api/admin/questions/rollback", () => {
 });
 
 describe("GET /api/admin/questions/versions", () => {
-  // Backs components/VersionHistory.tsx's rollback UI (RULING D, Task 7
-  // fix round 1). Read-only, metadata only -- version, note, publishedAt
-  // -- never the (large, unused here) `questions` column.
+  // Backs components/VersionHistory.tsx's rollback UI. Read-only,
+  // metadata only -- version, note, publishedAt -- never the (large,
+  // unused here) `questions` column.
 
   it("lists every version newest-first with its note and timestamp", async () => {
     const publishedAt3 = new Date("2026-01-01T00:00:00.000Z");

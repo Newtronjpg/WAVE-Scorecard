@@ -3,14 +3,11 @@ import type { Submission } from "@prisma/client";
 import type { StoredQuestion } from "./questionSet";
 
 // Two sheets. Submissions is the scannable list -- gap scores, overall,
-// band, and which question set a run answered -- with no per-question
-// columns; a run's full answer-by-answer detail lives in its own export
-// (lib/excelRun.ts) instead, since 28-plus columns per version made this
-// sheet unreadable and every version reworded/added/removed questions
-// differently anyway. Question sets is the reference: one row per
+// band, which question set a run answered -- with no per-question columns;
+// a run's full answer-by-answer detail lives in its own export
+// (lib/excelRun.ts) instead. Question sets is the reference: one row per
 // question per published version, so "what did W3 mean in March" is
-// always answerable from this workbook alone, without cross-referencing
-// the database.
+// answerable from this workbook alone.
 
 const BRAND_MAROON = "FF6D0104";
 const HEADER_TEXT = "FFFFFFFF";

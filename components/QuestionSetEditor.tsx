@@ -14,15 +14,12 @@ import { VersionHistory } from "./VersionHistory";
 
 type BusyAction = "save" | "publish" | "reset" | "reload" | null;
 
-// Owns the whole draft as one array in memory. Add/delete/reorder/change-
-// choice-count are all just producing a new array and calling setQuestions
-// -- that's what keeps them atomic once Save draft actually persists it.
+// Owns the whole draft as one array in memory -- add/delete/reorder/
+// change-choice-count all just produce a new array and call setQuestions.
 //
-// Client-side validation (validateQuestionSet, same function the server
-// runs) is for feedback only: it disables Publish and shows named
-// problems, but the server re-validates on every save and publish
-// regardless. A bypassed or stale client check can never let bad content
-// through -- it can only produce a worse error message.
+// Client-side validation is feedback only: the server re-validates on
+// every save and publish regardless, so a bypassed check can only produce
+// a worse error message, never let bad content through.
 export function QuestionSetEditor({
   initialQuestions,
   initialUpdatedAt,
@@ -46,26 +43,19 @@ export function QuestionSetEditor({
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Set only on a 409 from the draft PUT -- distinct from a generic error
-  // because it gets its own "Reload" affordance, and because auto-reloading
-  // on it would discard whatever the admin was mid-typing.
+  // Set only on a 409 from the draft PUT -- gets its own "Reload"
+  // affordance, since auto-reloading here would discard mid-typing edits.
   const [conflict, setConflict] = useState(false);
   // Set when a GET of the draft reports source "draft" with updatedAt
-  // null -- the one combination that means the saved draft row exists but
-  // could not be read cleanly (fails validation, or the read itself
-  // failed), as opposed to "no draft has ever been saved". Surfaced so an
-  // admin never mistakes "nothing to conflict with" for "there is real,
-  // unreadable content sitting under this save."
+  // null -- the saved draft row exists but couldn't be read cleanly, as
+  // opposed to "no draft has ever been saved."
   const [draftWarning, setDraftWarning] = useState<string | null>(null);
 
   const [publishArmed, setPublishArmed] = useState(false);
   const [publishNote, setPublishNote] = useState("");
   const [resetArmed, setResetArmed] = useState(false);
-  // Two-step confirm for Reload/Discard, matching DeleteSubmissionButton's
-  // arm-then-confirm-within-4s pattern -- both actions can silently
-  // destroy unsaved edits with a single click otherwise. Reload only
-  // requires arming when there's something to lose (dirty); Discard is
-  // only ever enabled when dirty, so it always requires it.
+  // Two-step confirm, matching DeleteSubmissionButton's pattern, since
+  // both can silently destroy unsaved edits with a single click otherwise.
   const [reloadArmed, setReloadArmed] = useState(false);
   const [discardArmed, setDiscardArmed] = useState(false);
 
@@ -98,9 +88,8 @@ export function QuestionSetEditor({
       const res = await fetch("/api/admin/questions/draft", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // Always echo the updatedAt this editor most recently loaded or
-        // saved. Once a draft row exists, the server 409s on anything else
-        // (omitted, null, or stale) -- see app/api/admin/questions/draft/route.ts.
+        // Echoes the updatedAt this editor most recently loaded or saved;
+        // the server 409s on anything else once a draft row exists.
         body: JSON.stringify({ questions, updatedAt }),
       });
 
@@ -131,15 +120,10 @@ export function QuestionSetEditor({
       setTimeout(() => setMessage((m) => (m === "Saved." ? null : m)), 2500);
       return true;
     } catch (e) {
-      // fetch() itself rejects (not just resolves with !res.ok) on a
-      // transport failure -- server restarted, wifi dropped, a cold-start
-      // timeout -- and res.json() rejects if a 2xx body isn't valid JSON.
-      // Either would otherwise throw unhandled here, skip every line
-      // below, and leave busyAction stuck forever: every button
-      // (including this one) permanently disabled with no error shown and
-      // no way out but a page reload that discards the unsaved edit. Not
-      // distinguishing network vs parse failures here -- both get the
-      // same honest "try again", which is all either warrants.
+      // fetch() and res.json() can both reject on a transport failure or
+      // a malformed body -- unhandled here, that would leave every button
+      // (busyAction) permanently disabled with no way out but a reload
+      // that discards the unsaved edit.
       console.error("saveDraft failed:", e);
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
@@ -148,8 +132,7 @@ export function QuestionSetEditor({
   }
 
   // Re-reads the draft from the server. Used both for the 409 banner's
-  // "Reload" action and after Reset to factory, which doesn't return the
-  // new content itself.
+  // "Reload" action and after a reset, which doesn't return content itself.
   async function reloadDraft() {
     setBusyAction("reload");
     clearTransient();
@@ -174,8 +157,6 @@ export function QuestionSetEditor({
       );
       setBusyAction(null);
     } catch (e) {
-      // See saveDraft's comment: fetch/res.json() can both reject, and an
-      // unhandled rejection here would leave busyAction stuck forever too.
       console.error("reloadDraft failed:", e);
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
@@ -187,8 +168,6 @@ export function QuestionSetEditor({
     clearTransient();
   }
 
-  // Discard is only ever clickable when dirty (see discardDisabled below),
-  // so this always arms first -- there is always something real to lose.
   function handleDiscardClick() {
     if (!discardArmed) {
       setDiscardArmed(true);
@@ -199,12 +178,9 @@ export function QuestionSetEditor({
     discardChanges();
   }
 
-  // Reload overwrites BOTH `questions` and `savedQuestions`, so a dirty
-  // admin has no way back afterward (Discard can't help -- its own
-  // snapshot was just replaced too). Only require the arm/confirm step
-  // when there's actually unsaved work to lose; a clean Reload has
-  // nothing to destroy and arming it would just be an annoying extra
-  // click.
+  // Reload overwrites both `questions` and `savedQuestions`, so Discard
+  // can't undo it afterward -- only arm/confirm when there's actually
+  // unsaved work to lose.
   function handleReloadClick() {
     if (!dirty) {
       reloadDraft();
@@ -234,9 +210,6 @@ export function QuestionSetEditor({
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        // Covers the "Save the draft before publishing." 400 from a draft
-        // row that has never been saved -- the API's message is already
-        // exactly right to show verbatim.
         setError(data?.error ?? "Could not publish. Please try again.");
         setBusyAction(null);
         setPublishArmed(false);
@@ -250,7 +223,6 @@ export function QuestionSetEditor({
       setPublishArmed(false);
       setPublishNote("");
     } catch (e) {
-      // See saveDraft's comment.
       console.error("confirmPublish failed:", e);
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
@@ -279,15 +251,11 @@ export function QuestionSetEditor({
 
       setResetArmed(false);
       // reset-draft doesn't return the new content, only { ok: true } --
-      // read it back so the editor shows exactly what's now persisted.
-      // reloadDraft manages its own busyAction lifecycle end-to-end (and
-      // is itself exception-safe now), so busyAction is deliberately not
-      // cleared here first -- it stays continuously busy through
+      // read it back so the editor shows what's now persisted. busyAction
+      // is left set here on purpose, so it stays continuously busy through
       // reset -> reload instead of flashing to enabled in between.
       await reloadDraft();
     } catch (e) {
-      // See saveDraft's comment. Only the reset-draft fetch itself can
-      // land here -- reloadDraft has its own try/catch and never throws.
       console.error("confirmReset failed:", e);
       setError("Something went wrong. Please try again.");
       setBusyAction(null);
@@ -303,11 +271,9 @@ export function QuestionSetEditor({
     setQuestions((current) => current.filter((q) => q.id !== id));
   }
 
-  // Drag-and-drop reorder: drops the dragged question immediately before
-  // wherever the target question currently sits in the underlying array.
+  // Drops the dragged question immediately before the target's position.
   // Only meaningful within a gap -- a question's gap is set from the
-  // dropdown, not by dragging it into a different section -- so this is a
-  // no-op across gaps rather than silently reassigning one.
+  // dropdown, not by dragging -- so this is a no-op across gaps.
   function reorderQuestion(draggedId: string, targetId: string) {
     if (draggedId === targetId) return;
     setQuestions((current) => {
@@ -326,17 +292,14 @@ export function QuestionSetEditor({
 
   function addQuestion(gap: Gap) {
     // Computed against the current render's `questions`, not a functional
-    // updater, because the new id has to be known synchronously to also
-    // seed justAddedId -- and a setState updater function is expected to
-    // be pure, so triggering a second state update from inside one is the
-    // wrong tool here even though it would usually work.
+    // updater, since the new id needs to be known synchronously to also
+    // seed justAddedId.
     const id = nextQuestionId(questions, gap);
     const newQuestion: StoredQuestion = {
       id,
       gap,
       statement: "",
-      // Four choices by default: it's the one count that maps onto the
-      // four tier names (Poor/Fair/Good/Excellent) with no level sharing
+      // Four choices maps onto the four tier names with no level sharing
       // a tier with another.
       levels: [1, 2, 3, 4].map((v) => ({ value: v, label: "", description: "" })),
     };

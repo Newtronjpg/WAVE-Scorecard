@@ -31,16 +31,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The literal draft row is the ONLY path into publication -- never the
-  // fallback-softened getDraftQuestions result. publish must refuse
-  // loudly when there is no draft row, or when the draft itself is
-  // corrupt, rather than silently publish whatever getDraftQuestions
-  // degraded to. That fallback used to exist here; it was removed because
-  // it both bypassed validateQuestionSet (factoryWithOverrides is never
-  // revalidated, so an out-of-bounds legacy QuestionOverride could reach
-  // QuestionSetVersion undetected) and would silently ship content the
-  // admin never opened. The admin editor always loads and saves a draft
-  // before publishing, so refusing here costs nothing in the real flow.
+  // The literal draft row is the only path into publication, never the
+  // fallback-softened getDraftQuestions result -- this refuses loudly on
+  // a missing or corrupt draft rather than silently publishing whatever
+  // that fallback degraded to. The admin editor always loads and saves a
+  // draft before publishing, so refusing here costs nothing in practice.
   let questions: StoredQuestion[];
   try {
     const row = await db.questionDraft.findUnique({ where: { id: "draft" } });

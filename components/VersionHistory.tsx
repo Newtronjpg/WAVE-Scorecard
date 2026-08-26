@@ -2,21 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-// A minimal version history / rollback panel for the draft editor
-// (components/QuestionSetEditor.tsx). Reads GET /api/admin/questions/versions
-// (metadata only -- version, note, publishedAt) and lets an admin roll
-// back to an older version via POST /api/admin/questions/rollback.
+// Version history / rollback panel for the draft editor. Collapsed by
+// default and only fetches once expanded, since this is a recovery
+// action, not part of the primary Save/Publish/Discard/Reset workflow.
 //
-// Collapsed by default and only fetches once expanded: this is a recovery
-// action, not part of the primary Save/Publish/Discard/Reset workflow, so
-// it shouldn't cost every editor page load a query it usually won't need.
-//
-// Rolling back APPENDS a new version carrying the target's content
-// forward -- app/api/admin/questions/rollback/route.ts never restores the
-// old version number itself. `onRolledBack` is handed that new number so
-// the parent's "Version N is live" header stays correct, and the list is
-// re-fetched (rather than spliced locally) so it picks up the freshly
-// created row with its real note and timestamp.
+// Rolling back appends a new version carrying the target's content
+// forward rather than restoring the old version number, so `onRolledBack`
+// hands the parent that new number to keep its "Version N is live" header
+// correct.
 
 interface VersionSummary {
   version: number;
@@ -118,17 +111,12 @@ export function VersionHistory({
 
       const data = await res.json();
       onRolledBack(data.version);
-      // Rollback only ever changes what's LIVE -- it never touches the
-      // draft, on purpose: an in-progress edit here shouldn't be silently
-      // wiped out by an emergency rollback someone else triggers. That
-      // means the editor's own content can look completely unchanged
-      // right after a real, successful rollback, which reads as "this
-      // isn't working" if nothing says otherwise.
+      // Rollback only ever changes what's live, never the draft, so the
+      // editor's content can look unchanged right after a real, successful
+      // rollback -- say so explicitly.
       setMessage(
         `Version ${data.version} is now live. Your draft here is unaffected -- publishing never touches the draft. If you want the editor to match, use "Set as default" on version ${data.version} below, then "Reset to default" above.`
       );
-      // Force a re-fetch so the list picks up the new version row (its
-      // real note and timestamp) rather than guessing at its shape here.
       setLoaded(false);
     } catch (e) {
       console.error("confirmRollback failed:", e);
@@ -164,9 +152,6 @@ export function VersionHistory({
         return;
       }
 
-      // No content to merge -- just drop it from the list locally rather
-      // than re-fetching, since nothing else about the remaining rows
-      // changed.
       setVersions((current) => current.filter((v) => v.version !== version));
     } catch (e) {
       console.error("confirmDelete failed:", e);

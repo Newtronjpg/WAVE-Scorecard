@@ -19,10 +19,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  // getDraftQuestions never throws by contract (Task 3), but this route
-  // is defense-in-depth against that contract changing or being violated
-  // some other way -- an admin testing a draft should see a readable 400,
-  // never an unhandled 500.
+  // getDraftQuestions never throws by contract, but this is defense in
+  // depth against that changing -- an admin testing a draft should see a
+  // readable 400, never an unhandled 500.
   let questions;
   try {
     const draft = await getDraftQuestions();

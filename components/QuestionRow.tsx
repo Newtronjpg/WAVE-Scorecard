@@ -11,19 +11,14 @@ import {
 } from "@/lib/questionSet";
 
 // One question in the draft editor: collapsed to its id and statement,
-// expanding to full editing -- statement, gap, per-choice label,
-// description, and read-only derived tier, add/remove choice, reorder
-// within its gap, and delete.
+// expanding to full editing.
 //
-// Fully controlled: this component holds no copy of the question's data,
-// only UI-only state (open/collapsed, the delete confirm's armed flag).
-// Every edit calls onChange with a brand-new StoredQuestion; the parent
-// (QuestionSetEditor) owns the actual array and is the only place that
-// persists anything.
+// Fully controlled -- holds no copy of the question's data, only UI state
+// (open/collapsed, the delete confirm's armed flag). Every edit calls
+// onChange with a brand-new StoredQuestion; the parent owns the array.
 
 // Values are always renumbered to 1..n by position, never trusted from
-// existing data, so add/remove/reorder can never leave a gap in the
-// sequence that validateQuestionSet would reject.
+// existing data, so add/remove/reorder can't leave a gap in the sequence.
 function renumbered(levels: StoredLevel[]): StoredLevel[] {
   return levels.map((level, i) => ({ ...level, value: i + 1 }));
 }
@@ -42,9 +37,8 @@ export function QuestionRow({
   startOpen?: boolean;
   onChange: (next: StoredQuestion) => void;
   onDelete: () => void;
-  // Reordering this question among its gap siblings by dragging. The
-  // handle (not the whole row) carries `draggable`, so a drag can never be
-  // confused with the click that expands/collapses the row.
+  // The drag handle (not the whole row) carries `draggable`, so a drag
+  // can't be confused with the click that expands/collapses the row.
   dragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -73,9 +67,6 @@ export function QuestionRow({
     });
   }
 
-  // Removes the choice at any position, not just the last one -- renumbered
-  // afterward closes whatever gap that leaves, so the remaining values stay
-  // contiguous 1..n regardless of which one was removed.
   function removeChoiceAt(index: number) {
     onChange({
       ...question,
@@ -83,10 +74,6 @@ export function QuestionRow({
     });
   }
 
-  // Moves the choice at `from` to sit right before whatever is currently
-  // at `to`, then renumbers -- same pattern as removeChoiceAt, so a
-  // reordered choice's rating value always matches its new position, not
-  // whatever it was labeled before the drag.
   function reorderChoice(from: number, to: number) {
     if (from === to) return;
     const next = [...question.levels];
@@ -95,9 +82,6 @@ export function QuestionRow({
     onChange({ ...question, levels: renumbered(next) });
   }
 
-  // Two-step inline confirm matching components/DeleteSubmissionButton.tsx:
-  // arms on the first click, executes on the second, and un-arms itself
-  // after 4s so a stray later click can't land as a confirm.
   function handleDeleteClick() {
     if (!deleteArmed) {
       setDeleteArmed(true);

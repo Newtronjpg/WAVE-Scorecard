@@ -447,16 +447,14 @@ describe("getDraftQuestions", () => {
     expect(result.questions).toEqual(withDerivedTiers(toStored(QUESTIONS)));
   });
 
-  // A draft row that EXISTS but fails validation must not be reported as
-  // updatedAt: null in a way that is indistinguishable from "no draft was
-  // ever written" -- Task 7's 409 check, and the editor's corruption
-  // warning, both need to know there IS a row it failed to read, not that
-  // there is nothing to conflict with. The timestamp on the bad row must
-  // not leak through either, since it cannot be trusted to describe
-  // content nobody could parse. source "draft" is the one value that
-  // signals this distinctly from the "no draft row at all" case below,
-  // even though the served CONTENT is still the safe published/factory
-  // fallback.
+  // A draft row that exists but fails validation must not be reported as
+  // updatedAt: null in a way indistinguishable from "no draft was ever
+  // written" -- the editor's 409 check and its corruption warning both
+  // need to know there IS a row it failed to read. The timestamp on the
+  // bad row must not leak through either, since it can't be trusted to
+  // describe content nobody could parse. source "draft" signals this
+  // distinctly from "no draft row at all," even though the served content
+  // is still the safe published/factory fallback.
   it("reports source \"draft\" (with updatedAt null) when the draft row exists but fails validation", async () => {
     findUniqueDraftMock.mockResolvedValue({
       id: "draft",
@@ -511,13 +509,12 @@ describe("seedDraftQuestions", () => {
     expect(upsertDraftMock).not.toHaveBeenCalled();
   });
 
-  // Finding 1: an existing draft row is validated, not trusted blindly.
-  // A corrupt row (hand-edited, a partial write) must not be handed to
-  // the admin editor typed as StoredQuestion[] when it structurally
-  // isn't one -- that is what turns "levels.map is not a function" into
-  // the admin's own repair tool being what crashes. Falling through to
-  // the reseed path instead overwrites the corrupt row, which makes this
-  // self-healing.
+  // An existing draft row is validated, not trusted blindly. A corrupt
+  // row (hand-edited, a partial write) must not be handed to the admin
+  // editor typed as StoredQuestion[] when it structurally isn't one --
+  // that's what turns "levels.map is not a function" into the admin's
+  // own repair tool being what crashes. Falling through to the reseed
+  // path instead overwrites the corrupt row, which makes this self-healing.
   it("reseeds and overwrites when the existing draft row fails validation", async () => {
     findUniqueDraftMock.mockResolvedValue({
       id: "draft",
@@ -568,10 +565,10 @@ describe("seedDraftQuestions", () => {
     expect(result.updatedAt).toEqual(writtenAt);
   });
 
-  // Finding 2: this is a write path with no honest degraded mode -- its
-  // return type promises a real Date, and fabricating one would poison
-  // Task 7's optimistic-concurrency check. It throws by design, and
-  // callers are expected to handle that.
+  // This is a write path with no honest degraded mode -- its return type
+  // promises a real Date, and fabricating one would poison the
+  // optimistic-concurrency check that depends on it. It throws by design,
+  // and callers are expected to handle that.
   it("throws rather than fabricating a result when the draft table is unreachable", async () => {
     findUniqueDraftMock.mockRejectedValue(new Error("draft table unreachable"));
 

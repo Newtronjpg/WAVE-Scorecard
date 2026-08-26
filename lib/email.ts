@@ -1,30 +1,15 @@
 import nodemailer from "nodemailer";
 import type { ScoreResult } from "./scoring";
 
-// Notifies staff by email when a client finishes the assessment.
+// Notifies staff by email when a client finishes the assessment, over
+// Gmail's SMTP server using an App Password (GMAIL_USER, GMAIL_APP_PASSWORD).
 //
-// Sends through Gmail's SMTP server using an App Password (a 16-character
-// credential generated in the sending account's Google security
-// settings, distinct from the account's real password and revocable on
-// its own). Two env vars carry the credential: GMAIL_USER (the sending
-// address) and GMAIL_APP_PASSWORD. Unlike a shared transactional-email
-// sandbox, this can deliver to ANY recipient with no domain-verification
-// step, so NOTIFY_EMAIL can be any address, or several.
-//
-// NOTIFY_EMAIL accepts a comma-separated list, so more than one person
-// (e.g. the owner plus a partner) can be notified. Each address is
-// trimmed and lowercased; blank entries are dropped.
-//
-// Failure here is deliberately non-fatal, AND deliberately bounded. A
-// submission has already been scored and saved by the time this runs
-// (see app/api/submit/route.ts); if the notification fails OR simply
-// takes too long (a slow network path to Gmail, a firewall silently
-// dropping the connection, anything), the person taking the assessment
-// still needs to see their results promptly. Without a timeout, an
-// `await` on a hung network call blocks the entire response
-// indefinitely, found exactly this way during testing: a real submission
-// hung until it had to be manually interrupted. TIMEOUT_MS bounds the
-// worst case to a few seconds instead of forever.
+// Failure here is non-fatal and bounded: a submission is already scored
+// and saved by the time this runs, so a slow or hung SMTP connection must
+// not delay the results the respondent is waiting on. Without a timeout,
+// a hung network call blocks the whole response indefinitely -- observed
+// once during testing, where a real submission hung until manually
+// interrupted. TIMEOUT_MS bounds the worst case to a few seconds.
 
 const TIMEOUT_MS = 8000;
 
@@ -42,15 +27,10 @@ export function parseRecipients(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
-// The admin link in the notification email has to be clickable from
-// wherever the recipient reads their mail, so it can never be a
-// localhost URL. By default it's derived from the origin of the request
-// that submitted the assessment, which is correct on a real deploy but
-// depends on proxy headers being passed through faithfully. Setting
-// NEXT_PUBLIC_SITE_URL pins it explicitly and removes that dependency.
-// A bare host ("example.com") is accepted and assumed https; anything
-// unparseable falls back to the request origin rather than dropping the
-// link out of the email entirely.
+// Defaults to the submitting request's origin, which is correct on a real
+// deploy but depends on proxy headers being passed through faithfully.
+// NEXT_PUBLIC_SITE_URL pins it explicitly instead. A bare host is assumed
+// https; anything unparseable falls back to the request origin.
 export function resolveAdminUrl(requestOrigin: string): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (configured) {
@@ -87,16 +67,13 @@ export interface NotificationDetails {
 }
 
 // Reads the Gmail configuration, or null when it isn't set up. Shared by
-// both senders so "configured" means exactly the same thing for a normal
-// notification and for a failure alert.
+// both senders so "configured" means the same thing everywhere.
 //
-// Recipients are passed in by the caller rather than read from the
-// environment here, because they now live in an admin-editable database
-// setting. Keeping the database out of this module leaves it
-// independently testable and usable from anywhere.
-//
-// An explicitly passed EMPTY list means "notifications are off" and must
-// not fall through to NOTIFY_EMAIL; only an absent argument falls back.
+// Recipients are passed in by the caller (they live in an admin-editable
+// setting) rather than read from the environment here, keeping this
+// module database-free and independently testable. An explicitly passed
+// empty list means "notifications are off"; only an absent argument falls
+// back to NOTIFY_EMAIL.
 export function resolveMailConfig(
   recipientsOverride?: string[]
 ): { user: string; pass: string; recipients: string[] } | null {
@@ -186,15 +163,10 @@ export interface PersistenceFailureDetails {
   error: unknown;
 }
 
-// Builds the alert sent when a submission scored correctly but could NOT
-// be written to the database.
-//
-// This email is not just a warning, it is the only surviving copy of that
-// submission. The row was never inserted, so nothing in the database can
-// recover it and no admin export will ever contain it. That is why the
-// body carries every raw answer verbatim: a staff member can reconstruct
-// the assessment by hand from this message alone. Kept separate from
-// sending so the content is directly testable without SMTP.
+// Builds the alert for a submission that scored correctly but couldn't be
+// written to the database. This email is the only surviving copy -- the
+// row was never inserted -- so the body carries every raw answer verbatim.
+// Kept separate from sending so the content is testable without SMTP.
 export function buildPersistenceFailureAlert(details: PersistenceFailureDetails): {
   subject: string;
   text: string;
@@ -206,27 +178,19 @@ export function buildPersistenceFailureAlert(details: PersistenceFailureDetails)
     .map(([id, rating]) => `  ${id}=${rating}`)
     .join("\n");
 
-  // `result` is absent when nothing was ever scored -- e.g. the
-  // question-set version this run answered could not be resolved at
-  // all, so scoreAssessment was never called. Rendering a score in that
-  // case would mean fabricating one; say plainly that none exists
-  // instead.
+  // `result` is absent when the question-set version couldn't be resolved
+  // at all, so scoreAssessment was never called -- say plainly that no
+  // score exists rather than fabricate one.
   const scoreSection = result
     ? `Overall: ${result.overallScore}/100 (${result.band.label})
 ${result.gaps.map((g) => `  ${g.name}: ${g.score}/100`).join("\n")}
 Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)`
     : `Score: not available (the question set for this submission's version could not be resolved)`;
 
-  // This prose was originally written for one failure mode only --
-  // db.submission.create throwing after scoring already succeeded, where
-  // the respondent's browser genuinely shows a normal results screen and
-  // they have no idea anything failed. Reused verbatim for the other
-  // failure mode (the question-set version itself could not be resolved,
-  // `result` absent) it was actively wrong: that respondent DID see an
-  // error and was told to try again, and a resolution failure is far
-  // more likely to be a one-off blip than an ongoing outage. Staff
-  // reading the wrong version of this either miss the one prospect who
-  // is genuinely stuck, or write off a transient hiccup as a full outage.
+  // Two failure modes need different wording: db.submission.create
+  // failing after scoring succeeded (the respondent sees a normal results
+  // screen) versus the version failing to resolve at all (the respondent
+  // saw an error and was told to retry).
   const respondentAwareness = result
     ? "They were shown their results as normal and do not know anything went wrong."
     : "They saw an error and were told their answers were not lost and to try again -- they may not know whether a retry has since succeeded.";
@@ -249,7 +213,7 @@ When:     ${new Date().toISOString()}
 
 ${scoreSection}
 
-Raw answers (question id = rating 1-5):
+Raw answers (question id = rating):
 ${answerLines}
 
 Why it failed:

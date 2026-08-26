@@ -1,18 +1,13 @@
 // The stored shape of the question set, and its single validation
-// gatekeeper.
+// gatekeeper. Every write path -- the admin draft save, publish, and the
+// runtime resolver that serves a prospect -- goes through
+// validateQuestionSet, since a malformed set that slips past this module
+// reaches real users. Pure and deterministic: no database, no Next.js.
 //
-// Every write path into the question set -- the admin draft save, the
-// publish action, and the runtime resolver that serves a prospect -- goes
-// through validateQuestionSet. A malformed set that slips past this module
-// reaches real users, so this file is pure and defensive: no database, no
-// Next.js, no I/O. Given the same input it always produces the same
-// verdict.
-//
-// StoredQuestion is deliberately narrower than Question (lib/questions.ts):
-// it has no `tier`, because tier is derived from `value` and the question's
-// own choice count (see withDerivedTiers), never stored. Storing a
-// computed value invites drift the moment someone edits `levels.length`
-// without recomputing tiers by hand.
+// StoredQuestion has no `tier` field -- tier is derived from a level's
+// value and the question's own choice count (see withDerivedTiers), never
+// stored, so a question's choice count can change without a migration to
+// fix up stale tiers.
 
 import { tierForLevel } from "./scoring";
 import { GAPS, QUESTIONS, type Gap, type Question } from "./questions";
@@ -178,12 +173,9 @@ function validateQuestion(
       });
     });
 
-    // Contiguity: values must be exactly 1..n once sorted. This only runs
-    // once every level's value has already passed the finite-number check
-    // above (hasNonFinite false) -- a level with NaN or Infinity was
-    // already rejected there, so skip the contiguity check entirely rather
-    // than let a partial `seenValues` list produce a second, confusing
-    // "not contiguous" error on top of the real one.
+    // Values must be exactly 1..n once sorted. Skipped entirely if any
+    // level failed the finite-number check above, so a partial
+    // `seenValues` list doesn't produce a second, confusing error.
     if (rawLevels.length > 0) {
       const hasNonFinite = seenValues.length !== rawLevels.length;
       if (hasNonFinite) {
@@ -226,14 +218,10 @@ export function validateQuestionSet(raw: unknown): ValidateResult {
     );
   }
 
-  // No deep copy: validateQuestion only reads `raw` and builds fresh
-  // StoredQuestion/StoredLevel objects via trimmed() -- it never assigns
-  // back into the input, so the result is already de-aliased from the
-  // caller's data without one. A copy here would also have to go through
-  // JSON.stringify to be worth anything, which throws on inputs this
-  // function must instead reject cleanly (a circular reference, a BigInt),
-  // and would silently coerce other non-JSON values (e.g. a Date) into
-  // strings instead of failing their type checks honestly.
+  // No deep copy needed: validateQuestion builds fresh objects via
+  // trimmed() rather than assigning back into the input. A JSON.stringify
+  // copy would also throw on inputs this function must reject cleanly
+  // instead (a circular reference, a BigInt).
   const questions: StoredQuestion[] = [];
   const seenIds: string[] = [];
   raw.forEach((rawQuestion, index) => {

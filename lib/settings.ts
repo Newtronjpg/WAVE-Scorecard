@@ -1,16 +1,10 @@
 import { db } from "./db";
 import { normalizeEmail, parseRecipients } from "./email";
 
-// Editable settings, stored one row per key.
-//
-// Today there is exactly one: the notification recipient list. It lives
-// in the database rather than an environment variable so a staff member
-// (or a prospective user trying the demo) can change who gets notified
-// without a code change and without a redeploy, which is what an
-// environment variable would require.
-//
-// The NOTIFY_EMAIL environment variable remains the fallback when no row
-// has been saved, so existing deployments keep working untouched.
+// Editable settings, stored one row per key. Today there's exactly one:
+// the notification recipient list, in the database rather than an env var
+// so a staff member can change it without a redeploy. NOTIFY_EMAIL remains
+// the fallback when no row has been saved.
 
 export const NOTIFY_EMAIL_KEY = "notify_email";
 

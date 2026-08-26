@@ -96,14 +96,12 @@ describe("buildPersistenceFailureAlert", () => {
   });
 
   it("does not claim the respondent saw a normal result when there was no score to show them", () => {
-    // Task 5 review I-1: this prose was written for db.submission.create
-    // failing AFTER scoring succeeded, where the respondent's browser
-    // genuinely shows a normal results screen. Reused verbatim for the
-    // other failure mode -- the question-set version itself could not
-    // be resolved, so `result` is absent -- it was actively false: that
-    // respondent saw an error and was told to retry. Staff reading the
-    // wrong version either miss the one prospect who is genuinely
-    // stuck, or read a one-off blip as a full outage.
+    // This alert's prose was written for db.submission.create failing
+    // after scoring succeeded, where the respondent's browser genuinely
+    // shows a normal results screen. It must not get reused verbatim for
+    // the other failure mode -- the question-set version itself couldn't
+    // be resolved, so `result` is absent -- since that respondent saw an
+    // error and was told to retry.
     const { text } = buildPersistenceFailureAlert({
       ...fakeDetails(),
       result: undefined,

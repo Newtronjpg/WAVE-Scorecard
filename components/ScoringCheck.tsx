@@ -2,14 +2,11 @@ import { GAPS } from "@/lib/questions";
 import { normalizeAnswer } from "@/lib/scoring";
 import type { StoredQuestion } from "@/lib/questionSet";
 
-// An automatic sanity check on the draft's scoring math -- not a report an
-// admin has to read and interpret. Silent when everything checks out;
-// speaks up, by question id, only when it finds something a normal edit in
-// this editor can't produce (rating values that aren't 1..n in order, most
-// likely from a hand-edited row). validateQuestionSet still catches
-// structural problems like an empty gap on Publish; this is a narrower,
-// earlier check for the one class of error that wouldn't otherwise be
-// visible until a score came back wrong.
+// An automatic sanity check on the draft's scoring math. Silent when
+// everything checks out; speaks up by question id only when it finds
+// rating values that aren't 1..n in order (most likely a hand-edited row)
+// -- a narrower, earlier check than validateQuestionSet for the one class
+// of error that wouldn't otherwise be visible until a score came back wrong.
 
 function findMisconfigured(questions: StoredQuestion[]): string[] {
   const bad: string[] = [];

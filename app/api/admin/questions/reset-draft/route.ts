@@ -9,12 +9,10 @@ import { factoryQuestionSet, toStored, type StoredQuestion } from "@/lib/questio
 // published version, the admin-designated default version, or the shipped
 // factory defaults -- an admin's "start over" button.
 //
-// "default" is deliberately NOT the same thing as lib/questions.ts's
-// factoryQuestionSet(): that literal is pinned by tests/scoring.test.ts
-// and can never change shape, while "default" is whichever published
-// version an admin has marked as their real working baseline (see
-// app/api/admin/questions/versions/[version]/default/route.ts) -- for
-// this project, that's the 4-choice set, not the original 5-choice one.
+// "default" is deliberately not lib/questions.ts's factoryQuestionSet():
+// that literal is pinned by tests/scoring.test.ts and can never change
+// shape, while "default" is whichever published version an admin has
+// actually marked as their working baseline.
 
 const resetSchema = z.object({
   to: z.enum(["live", "default", "factory"]),

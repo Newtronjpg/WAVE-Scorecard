@@ -1,23 +1,16 @@
 // Scoring logic for the WAVE Scorecard.
 //
-// This preserves the exact formula reverse-engineered from the existing
-// HTML prototype (verified against its worked example: Wealth 50,
-// Accounting 75, Value 50, Earnings 57 -> overall 58):
-//
-//   normalized = (rating - 1) / 4 * 100        (1 -> 0, 5 -> 100)
-//   gapScore   = average of normalized scores for that gap's 7 questions
+//   normalized = (rating - 1) / (choiceCount - 1) * 100
+//   gapScore   = average of normalized scores for that gap's questions
 //   overall    = average of the 4 (rounded) gap scores
 //
-// Rounding happens at each displayed number (gap scores, then overall),
-// not just at the end. That's deliberate: if someone looks at the four
-// gap scores on the results page and averages them by hand, they should
-// land on the same overall number we show, not be off by a fraction from
-// unrounded intermediate math.
+// Rounding happens at each displayed number, not just at the end -- if
+// someone averages the four gap scores on the results page by hand, they
+// should land on the same overall number shown, not be off by a fraction.
 //
-// This module has zero dependencies on Next.js, Prisma, or the DOM, so it
-// can be unit tested directly (see tests/scoring.test.ts) and reused by
-// the /api/submit route, the results page, and the Excel export without
-// three different copies of the math ever drifting apart.
+// Zero dependencies on Next.js, Prisma, or the DOM, so this is unit
+// tested directly (tests/scoring.test.ts) and reused by /api/submit, the
+// results page, and the Excel export without risking drift.
 
 import { GAPS, QUESTIONS, type Gap, type Question, type Tier } from "./questions";
 
@@ -90,29 +83,19 @@ export function normalizeAnswer(rating: number, choiceCount: number = 5): number
   return ((rating - 1) / (choiceCount - 1)) * 100;
 }
 
-// Tier derives from the level's POSITION among choiceCount options, spread
-// as evenly as possible across the four tier names, rather than from fixed
-// 25/50/75 cutoffs on the normalized score. Fixed cutoffs read cleanly at
-// five choices (0/25/50/75/100 lines up 1=Poor 2=Fair 3=Good 4=Excellent
-// 5=Excellent) but the last two collide into the same label -- a quartile
-// boundary landing exactly on a level, which happens at 5, 9, 13... choices
-// and reads as a bug once an admin can see every level's tier side by side.
-// Even distribution guarantees no more than one tier ever absorbs an extra
-// level, and always anchors the bottom choice at Poor and the top choice at
-// Excellent for any choiceCount of 4 or more.
+// Tier derives from the level's position among choiceCount options, spread
+// evenly across the four tier names, rather than fixed 25/50/75 cutoffs on
+// the normalized score. Fixed cutoffs read cleanly at five choices but the
+// top two collide into the same label at 5, 9, 13... choices, which reads
+// as a bug once an admin can see every level's tier side by side.
+//
+// Deliberately not shared with lib/questions.ts's own tierFor, which stays
+// on the original fixed mapping that tests/scoring.test.ts pins for the
+// factory data and must never change -- safe to leave alone, since nothing
+// reads a stored tier field; this function is called fresh on every render.
 export function tierForLevel(value: number, choiceCount: number): Tier {
-  // Reuses normalizeAnswer purely for its validation (throws on an
-  // out-of-range choiceCount or value); the tier itself comes from
+  // Reuses normalizeAnswer purely for its validation; tier comes from
   // position, not the normalized score.
-  //
-  // This is intentionally NOT shared with lib/questions.ts's own tierFor,
-  // which stays on the original fixed 1=Poor 2=Fair 3=Good 4-5=Excellent
-  // map -- tests/scoring.test.ts pins that exact mapping for the factory
-  // question bank's literal data and must never be edited. That's safe to
-  // leave alone: QuestionRow.tsx (and withDerivedTiers) never read a
-  // stored tier field, they call this function fresh on every render, so
-  // the admin editor always reflects the distribution below regardless of
-  // what's baked into the factory data.
   normalizeAnswer(value, choiceCount);
   const tiers: Tier[] = ["Poor", "Fair", "Good", "Excellent"];
   const bucket = Math.floor(((value - 1) * tiers.length) / choiceCount);
@@ -192,10 +175,6 @@ export function scoreAssessment(
   };
 }
 
-// Same tier system the source Excel workbook already uses in the Action
-// Library and Combo Rules ("W1 is Good/Excellent AND W3 is Poor/Fair"). Keeping
-// this in one function means the rubric UI, the results page, and any
-// future rules engine all agree on what "Poor" means for a given answer.
 /**
  * @deprecated Five-choice questions only. It takes no choice count, so it
  * cannot describe a 3- or 7-choice question. Use tierForLevel(value, count).

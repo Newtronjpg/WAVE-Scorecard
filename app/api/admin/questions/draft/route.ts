@@ -29,11 +29,10 @@ export async function GET() {
     questions: toStored(draft.questions),
     updatedAt: draft.updatedAt ? draft.updatedAt.toISOString() : null,
     publishedVersion: published.version,
-    // Lets a client (Task 7's editor) tell "no draft yet" apart from "a
-    // draft row exists but is unreadable" -- both report updatedAt: null,
-    // but only the second is a real row with content that a blind
-    // overwrite would destroy. See getDraftQuestions's own comment in
-    // lib/questionContent.ts.
+    // Lets the editor tell "no draft yet" apart from "a draft row exists
+    // but is unreadable" -- both report updatedAt: null, but only the
+    // second is real content a blind overwrite would destroy. See
+    // getDraftQuestions's own comment in lib/questionContent.ts.
     source: draft.source,
   });
 }
@@ -70,16 +69,13 @@ export async function PUT(req: NextRequest) {
     // can hold the editor at once; without this the second save silently
     // discards the first person's work.
     //
-    // Whenever a draft row EXISTS, a matching updatedAt is REQUIRED --
-    // omitted, null, or mismatched all 409. Only when there is no draft
-    // row at all may updatedAt be absent (there is nothing to conflict
-    // with yet). This is intentionally stricter than "409 only on a
-    // mismatch": getDraftQuestions reports updatedAt: null for BOTH "no
-    // draft row" and "draft row exists but is unreadable" (fails
-    // validateQuestionSet, or the read itself throws). Treating a client's
-    // nullish updatedAt as "no conflict possible" would let it blind-
-    // overwrite a real row in the second case -- exactly the failure
-    // Task 3's `source` field on getDraftQuestions was added to prevent.
+    // Whenever a draft row exists, a matching updatedAt is required --
+    // omitted, null, or mismatched all 409. Only when there's no draft row
+    // at all may updatedAt be absent. This is stricter than "409 only on a
+    // mismatch" on purpose: getDraftQuestions reports updatedAt: null for
+    // both "no draft row" and "draft row exists but is unreadable," and
+    // treating a nullish updatedAt as "no conflict possible" would let a
+    // client blind-overwrite real content in the second case.
     const existing = await db.questionDraft.findUnique({ where: { id: "draft" } });
 
     if (existing) {

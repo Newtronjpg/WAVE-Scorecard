@@ -40,18 +40,12 @@ export async function POST(req: NextRequest) {
   }
 
   // The respondent's browser carries the question-set version it loaded at
-  // the START of the assessment (app/page.tsx resolves {questions, version}
-  // once and threads version through components/Assessment.tsx untouched
-  // to this request). That matters because a publish can land while
-  // someone is mid-assessment: the set live RIGHT NOW is not necessarily
-  // the set they answered. When a version travels with the request, we
-  // resolve that EXACT historical snapshot via getQuestionsForVersion --
-  // QuestionSetVersion rows are append-only and immutable (see
-  // prisma/schema.prisma), so the lookup is always reproducible -- instead
-  // of asking getPublishedQuestions what's live now. Only fall back to the
-  // live published set when the request carries no version at all (an
-  // older cached client bundle, or a non-browser caller); that fallback is
-  // also what keeps the pre-versioning behavior working unchanged.
+  // the start of the assessment. A publish can land mid-assessment, so
+  // what's live right now isn't necessarily what they answered -- resolve
+  // that exact historical snapshot via getQuestionsForVersion instead of
+  // asking what's live now. Falls back to the live published set only when
+  // the request carries no version at all (an older cached client, or a
+  // non-browser caller).
   const bodyRecord: Record<string, unknown> =
     body !== null && typeof body === "object" && !Array.isArray(body)
       ? (body as Record<string, unknown>)
@@ -65,27 +59,19 @@ export async function POST(req: NextRequest) {
   if (requestedVersion !== undefined) {
     let resolved = await getQuestionsForVersion(requestedVersion);
     if (!resolved) {
-      // getQuestionsForVersion swallows read errors into a null return
-      // (see its own try/catch in lib/questionContent.ts) alongside a
-      // genuinely missing/corrupt row, so a single null here could just
-      // be a transient blip -- a connection-pool timeout, a cold start --
-      // rather than something permanently unresolvable. One retry costs
-      // a single extra round trip and closes that common case for free
-      // before we give up on an otherwise-complete assessment.
+      // A null here could be a transient blip (connection-pool timeout,
+      // cold start) rather than something permanently unresolvable -- one
+      // retry closes that common case for free.
       resolved = await getQuestionsForVersion(requestedVersion);
     }
     if (!resolved) {
-      // Still unresolvable after a retry: there is nothing safe to
-      // validate, score, or snapshot the run against, so we do not write
-      // a Submission row for it. But per review finding C1, that must
-      // never mean the respondent's answers are silently thrown away --
-      // db.submission.create's own catch block below exists precisely
-      // because a swallowed failure here once lost every hosted
-      // submission for a day. Mirror that remedy exactly: alert staff
-      // with the raw answers, since this response is the only place
-      // that data still exists. Extracted straight from the raw body
-      // (not the zod-validated `answers` below) because that schema is
-      // built from `questions`, which we don't have on this path.
+      // Still unresolvable: nothing safe to validate, score, or snapshot
+      // against, so no Submission row is written. But the answers must
+      // not silently vanish -- a swallowed failure here once lost every
+      // hosted submission for a day -- so alert staff with the raw
+      // answers instead, extracted straight from the raw body since the
+      // zod schema below is built from `questions`, which isn't available
+      // on this path.
       const rawAnswers = bodyRecord.answers;
       const answersForAlert: Record<string, number> =
         rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers)
@@ -103,15 +89,11 @@ export async function POST(req: NextRequest) {
       const reason = `Could not resolve question set version ${requestedVersion} after a retry.`;
       console.error(reason);
 
-      // Review finding I-2: this branch runs before the zod parse below
-      // (that schema needs `questions`, which this path never obtained),
-      // so without a check here a request that was never a genuine
-      // attempt -- no answers at all, a fractional "version" like 3.5
-      // that could never match a real row -- would still page staff with
-      // an "ACTION NEEDED" alert about nothing. Screening on shape alone
-      // (not full validation, which still happens later for anything
-      // that reaches it) keeps the alert meaning what its subject line
-      // claims: a real assessment that really could not be saved.
+      // This runs before the zod parse below (that schema needs
+      // `questions`, unavailable on this path), so without a shape check
+      // here a request that was never a genuine attempt -- no answers at
+      // all, a fractional "version" that could never match a real row --
+      // would still page staff with an alert about nothing.
       const looksLikeARealAttempt =
         Object.keys(answersForAlert).length > 0 &&
         prospectNameForAlert.trim().length > 0 &&
@@ -127,10 +109,8 @@ export async function POST(req: NextRequest) {
             companyName: companyNameForAlert,
             recipients,
             answers: answersForAlert,
-            // No score exists on this path -- nothing was resolved to
-            // score against, so `result` is correctly omitted rather than
-            // fabricated (see PersistenceFailureDetails.result, now
-            // optional for exactly this case).
+            // No score exists on this path, so `result` is correctly
+            // omitted rather than fabricated.
             adminUrl,
             error: new Error(reason),
           });
@@ -142,14 +122,10 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 503, not 409: this is not a conflict between the request and
-      // server state (409's usual meaning) -- it's our own dependency,
-      // the question-set store, that could not be read twice in a row.
-      // That is squarely "the server is temporarily unable to handle
-      // the request" territory, and 503 correctly signals to a
-      // programmatic caller that retrying shortly is reasonable, where
-      // 409 would incorrectly suggest the request itself needs to
-      // change before it can succeed.
+      // 503, not 409: this isn't a conflict between the request and
+      // server state, it's our own dependency (the question-set store)
+      // failing twice in a row -- 503 correctly tells a caller retrying
+      // shortly is reasonable.
       return NextResponse.json(
         {
           error:
@@ -200,9 +176,8 @@ export async function POST(req: NextRequest) {
   try {
     result = scoreAssessment(answers, questions);
   } catch (e) {
-    // scoreAssessment only throws for missing/out-of-range answers, both
-    // of which the zod schema above should already have caught, so this
-    // is a defense-in-depth branch rather than an expected path.
+    // Defense in depth: the zod schema above should already have caught
+    // any missing/out-of-range answer scoreAssessment would throw on.
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Could not score assessment." },
       { status: 400 }
@@ -215,9 +190,8 @@ export async function POST(req: NextRequest) {
   const earnings = result.gaps.find((g) => g.gap === "earnings")!;
 
   const adminUrl = resolveAdminUrl(req.nextUrl.origin);
-  // Resolved once, before the write, so the failure alert can still reach
-  // someone when the write is what failed. getNotifyRecipients falls back
-  // to NOTIFY_EMAIL if the settings read itself fails.
+  // Resolved before the write so the failure alert can still reach
+  // someone if the write itself is what fails.
   const recipients = await getNotifyRecipients();
   let saved = true;
   let notification: { sent: boolean; reason?: string } = {
@@ -245,22 +219,16 @@ export async function POST(req: NextRequest) {
         // The literal question set `questions` (above) was scored
         // against -- id, gap, statement, levels -- so this row is
         // self-describing even if the QuestionSetVersion it names is
-        // ever unreadable. See prisma/schema.prisma for the full
-        // rationale (Task 5 review I2).
+        // ever unreadable. See prisma/schema.prisma for the full rationale.
         questionSetSnapshot: toStored(questions) as unknown as Prisma.InputJsonValue,
       },
     });
   } catch (e) {
     // The person taking the assessment should still see their results
-    // even if the save fails; a DB hiccup must not block someone from
-    // seeing a score they just spent five minutes earning.
-    //
-    // But a swallowed failure here once lost every hosted submission for
-    // a day, because the response was indistinguishable from a success
-    // and nobody was told. So the failure now travels two ways: `saved`
-    // goes back to the client, and an alert goes to staff carrying the
-    // raw answers, since this response is the only place that data still
-    // exists.
+    // even if the save fails -- but a swallowed failure here once lost
+    // every hosted submission for a day, indistinguishable from success
+    // with nobody told. So the failure travels two ways now: `saved` goes
+    // back to the client, and an alert goes to staff with the raw answers.
     saved = false;
     console.error("Failed to persist submission:", e);
 
@@ -275,23 +243,20 @@ export async function POST(req: NextRequest) {
         error: e,
       });
     } catch (alertError) {
-      // sendPersistenceFailureAlert is written not to throw, so reaching
-      // here means something unforeseen. Never let it mask the original
-      // data loss or break the response.
+      // sendPersistenceFailureAlert shouldn't throw; reaching here means
+      // something unforeseen. Never let it mask the original data loss.
       console.error("Failed to raise persistence failure alert:", alertError);
     }
   }
 
-  // Only for submissions that actually landed. Sending the routine "new
-  // submission" email after a failed write would tell staff a submission
-  // is waiting in the admin table when it is not there at all; the
-  // failure alert above is what gets sent instead.
+  // Only for submissions that actually landed -- the routine "new
+  // submission" email after a failed write would point staff at a
+  // submission that isn't in the admin table at all.
   //
   // Awaited on purpose: a serverless function can be frozen or torn down
-  // the moment the response is sent, so an un-awaited "fire and forget"
-  // email risks never actually going out. sendSubmissionNotification
-  // itself never throws (see lib/email.ts), so this can't fail the
-  // response, it can only add a little latency while it sends.
+  // the moment the response is sent, so an un-awaited email risks never
+  // going out. sendSubmissionNotification never throws, so this only adds
+  // latency, it can't fail the response.
   if (saved) {
     notification = await sendSubmissionNotification({
       prospectName,
@@ -305,16 +270,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // _notification only appears outside production (NODE_ENV is set
-  // automatically by `next dev`/`next start`, nothing to configure). It
-  // exists so the email outcome shows up directly in whatever terminal
-  // is testing /api/submit, curl's own stdout included, instead of
-  // needing to go find it in a separate server log window. On the real
-  // deploy this field never appears at all, so it can't leak mail
-  // error text or delivery status to an actual client.
-  // `saved` ships in production too, unlike _notification. The client
-  // needs it to tell the person their results were not recorded; without
-  // it a lost submission looks exactly like a successful one.
+  // _notification is dev-only, so the email outcome shows up directly in
+  // whatever's testing this endpoint instead of a separate server log --
+  // never appears on a real deploy, so it can't leak mail status to a
+  // client. `saved` ships in production too: the client needs it to tell
+  // the person their results weren't recorded.
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ ...result, saved });
   }

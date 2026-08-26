@@ -10,32 +10,16 @@ import {
 } from "./questionSet";
 
 // Resolves the question set shown to a prospect and the one edited in the
-// admin UI.
+// admin UI. The database owns the published set; lib/questions.ts is only
+// the factory default and read-path fallback (missing table, bad data) --
+// not theoretical, a missing table caused a real outage here. Every value
+// read from the database goes through validateQuestionSet first.
 //
-// The database now owns the published question set: which questions
-// exist, their ids, their gap, how many rating levels each has, and every
-// level's label/description/value. lib/questions.ts is no longer the
-// runtime source of truth -- it is the factory default, both the seed
-// data for a fresh install and the fallback whenever the database is
-// unreachable or holds something invalid. Every value this file READS out
-// of the database passes through validateQuestionSet (lib/questionSet.ts,
-// via resolveQuestions below) before it is trusted; nothing here derives
-// tiers from unvalidated input.
-//
-// The fallback chain is the safety-critical part of this file, but it
-// only covers the READ paths (resolveQuestions, getPublishedQuestions,
-// getQuestionsForVersion, getDraftQuestions): a missing table, a read
-// error, or an invalid stored set must all degrade to the factory
-// questions (optionally with lingering QuestionOverride wording layered
-// on, see getPublishedQuestions) rather than breaking the assessment for
-// every prospect. That is not theoretical -- a missing table caused a
-// real production outage here.
-//
-// seedDraftQuestions is deliberately exempt from that promise: it is a
-// WRITE path, and its contract requires a real, non-nullable Date back.
-// There is no honest degraded value for that -- fabricating one would
-// poison Task 7's optimistic-concurrency check -- so it throws instead of
-// swallowing a database failure. See its own comment below.
+// Only the read paths (resolveQuestions, getPublishedQuestions,
+// getQuestionsForVersion, getDraftQuestions) get that fallback.
+// seedDraftQuestions is a write path and throws instead, since its
+// contract needs a real timestamp and a fabricated one would break the
+// optimistic-concurrency check that depends on it.
 
 export interface QuestionOverrideRow {
   questionId: string;
@@ -117,23 +101,14 @@ export function resolveQuestions(raw: unknown): Question[] | null {
 }
 
 // The factory set with any still-live QuestionOverride wording layered on
-// top. Used only when there is no published version to prefer instead --
-// no row yet, or the row that exists is invalid.
+// top. Used only when there's no published version to prefer -- this
+// keeps wording edits made before versioned publishing existed from being
+// silently reverted for every prospect until the first publish. Once a
+// version is published, that version wins and this stops being consulted.
 //
-// This closes a regression window opened by adding versioned publishing:
-// before it existed, the public assessment read QuestionOverride rows
-// directly, so wording edits already live in production drove what a
-// prospect saw. If "no published version" fell straight through to bare
-// QUESTIONS, every one of those edits would be silently reverted the
-// moment this shipped, for every prospect, until the first publish --
-// while the admin UI kept showing them as saved. Merging overrides in
-// here preserves that wording across the gap. Once a version is
-// published (seeded from these same overrides, see seedDraftQuestions),
-// that version wins outright and this stops being consulted.
-//
-// The override read is wrapped in its own try/catch, independent of the
-// caller's, so a second table failure here still degrades all the way to
-// the untouched factory defaults rather than throwing past this helper.
+// Wrapped in its own try/catch so a second table failure here still
+// degrades to the untouched factory defaults rather than throwing past
+// this helper.
 async function factoryWithOverrides(): Promise<Question[]> {
   try {
     const overrides = await db.questionOverride.findMany();
@@ -182,27 +157,18 @@ export async function getPublishedQuestions(): Promise<{
   }
 }
 
-// Resolves the EXACT question set a specific published version
-// represented -- independent of whatever getPublishedQuestions would
-// report right now. /api/submit uses this instead of getPublishedQuestions
-// when a version traveled with the request, so a submission is always
-// scored against what the respondent actually loaded, not whatever
-// happens to be live if a publish landed mid-assessment.
+// Resolves the exact question set a specific published version
+// represented, independent of whatever's live right now. /api/submit uses
+// this so a submission is scored against what the respondent actually
+// loaded, not whatever happens to be live if a publish lands mid-assessment.
 //
-// version === null describes only the "nothing has ever been published"
-// state a prospect could have loaded before the very first publish.
-// factoryWithOverrides() is safe to recompute later for that case because
-// nothing writes to QuestionOverride any more (that write path was
-// retired by the versioned editor, see the file header above) -- it is
-// frozen, deterministic input, so calling it again reproduces
-// byte-for-byte what was served at load time even if a publish has
-// happened since.
+// version === null means "nothing had been published yet" when the
+// respondent loaded the page -- factoryWithOverrides() is safe to
+// recompute since nothing writes to QuestionOverride anymore.
 //
-// Returns null (never throws) when the version cannot be resolved: no
-// such row, a row that fails validation, or a read error. The caller must
-// treat that as "this run can no longer be trusted to score against what
-// the respondent saw" rather than silently falling back to a different
-// question set.
+// Returns null (never throws) when the version can't be resolved. The
+// caller should treat that as "can no longer trust what this run scored
+// against," not silently fall back to a different question set.
 export async function getQuestionsForVersion(
   version: number | null
 ): Promise<Question[] | null> {
@@ -227,20 +193,15 @@ export async function getQuestionsForVersion(
 }
 
 // The admin editor reads this. Serves the "draft" row when it exists and
-// validates; otherwise falls back to the current published set, then to
-// the factory default.
+// validates; otherwise falls back to the current published set, then the
+// factory default.
 //
-// `source` says which of those three actually produced `questions`, and
-// exists because `updatedAt: null` is otherwise ambiguous in a way that
-// matters: it is null both when no draft was ever written AND when a
-// draft row exists but is unreadable (fails validation, or the read
-// itself throws). Those are not the same situation -- one has nothing to
-// conflict with, the other has real content Task 7's 409
-// optimistic-concurrency check must not silently treat as absent (and
-// whose stale timestamp must not leak through either, since it cannot be
-// trusted to describe content nobody could parse). `source` lets a caller
-// tell those apart and say "your draft could not be read, showing the
-// live version instead" instead of pretending no draft exists.
+// `source` disambiguates a null `updatedAt`: it's null both when no draft
+// was ever written and when a draft row exists but can't be read. Those
+// aren't the same -- the optimistic-concurrency check on the editor's save
+// must not silently treat real, unreadable content as absent. `source`
+// lets the caller say "your draft couldn't be read, showing the live
+// version instead" instead of pretending no draft exists.
 export async function getDraftQuestions(): Promise<{
   questions: Question[];
   updatedAt: Date | null;
@@ -256,14 +217,11 @@ export async function getDraftQuestions(): Promise<{
       console.error(
         "Draft question set failed validation; falling back to the published set."
       );
-      // The row EXISTS but couldn't be read cleanly -- report source
-      // "draft" (with updatedAt still null) so a caller can tell this
-      // apart from "no draft was ever written". The CONTENT served is
-      // still the safe published/factory fallback below; only the
-      // reported source changes, since that is the one signal that lets
-      // Task 7's editor warn "your draft could not be read" instead of
-      // silently treating a corrupt row as if nothing were there to
-      // conflict with.
+      // The row exists but can't be read cleanly -- report source "draft"
+      // (updatedAt still null) so the editor can warn "your draft could
+      // not be read" instead of treating a corrupt row as if nothing were
+      // there to conflict with. Content served is still the safe fallback
+      // below.
       const published = await getPublishedQuestions();
       return { questions: published.questions, updatedAt: null, source: "draft" };
     }
@@ -279,24 +237,19 @@ export async function getDraftQuestions(): Promise<{
   };
 }
 
-// The one-time migration off the old QuestionOverride table, and the
-// draft's lazy initializer: if a draft row already exists AND validates,
-// return it as-is. Otherwise (no row, or a row that fails validation --
-// hand-edited, a partial write) seed one -- from the highest published
-// version if there is one, or else from the code defaults merged with
-// any lingering QuestionOverride rows, so wording edits made before this
-// table existed carry forward -- write it, and return what was written.
-// A corrupt existing row is deliberately overwritten by this reseed
-// rather than merely reported: this function IS the admin editor's
-// entry point, so refusing to repair a corrupt row here would leave the
-// admin unable to fix it through the only tool meant to fix it.
+// The draft's lazy initializer, and the one-time migration off the old
+// QuestionOverride table: if a draft row exists and validates, return it.
+// Otherwise seed one -- from the highest published version if there is
+// one, else from the code defaults merged with any lingering
+// QuestionOverride rows -- write it, and return what was written. A
+// corrupt row is overwritten rather than just reported, since this
+// function is the admin editor's own entry point and is the only tool
+// meant to fix it.
 //
-// This function throws rather than degrading. Every other exported
-// function in this file has an honest fallback value to hand back on a
-// database failure; this one does not -- its contract is a real,
-// non-nullable Date, and a write path fabricating one would poison Task
-// 7's optimistic-concurrency check (worse than surfacing the failure).
-// Callers must handle the rejection themselves.
+// Throws rather than degrading, unlike every other exported function
+// here: its contract is a real, non-nullable Date, and a fabricated one
+// on failure would poison the optimistic-concurrency check that depends
+// on it. Callers handle the rejection themselves.
 export async function seedDraftQuestions(): Promise<{
   questions: StoredQuestion[];
   updatedAt: Date;

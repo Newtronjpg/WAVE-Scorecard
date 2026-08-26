@@ -186,10 +186,10 @@ describe("POST /api/submit and the published question set", () => {
   });
 
   it("stores a snapshot of the literal question set the run was scored against", async () => {
-    // Task 5 review I2: a null questionSetVersion is ambiguous about what
-    // was actually asked. questionSetSnapshot fixes that by carrying the
-    // full stored question set (id, gap, statement, levels) on the row
-    // itself, so no join back to QuestionSetVersion is ever required.
+    // A null questionSetVersion is ambiguous about what was actually
+    // asked. questionSetSnapshot fixes that by carrying the full stored
+    // question set on the row itself, so no join back to
+    // QuestionSetVersion is ever required.
     createMock.mockResolvedValue({ id: "abc" });
     const { POST } = await import("@/app/api/submit/route");
 
@@ -409,12 +409,11 @@ describe("POST /api/submit resolves the version that traveled with the request",
   });
 
   it("does not write a row, but alerts staff with the raw answers, when the version still cannot be resolved after a retry", async () => {
-    // Task 5 review C1: a version-resolution failure must never be
-    // indistinguishable from silently discarding a completed assessment.
-    // Nothing safe exists to score or snapshot against, so no row is
-    // written -- but the answers must not simply vanish, mirroring the
-    // remedy already used for a db.submission.create failure a few lines
-    // below in the route: alert staff with the raw answers.
+    // A version-resolution failure must never be indistinguishable from
+    // silently discarding a completed assessment. Nothing safe exists to
+    // score or snapshot against, so no row is written -- but the answers
+    // must not simply vanish, mirroring the db.submission.create failure
+    // remedy a few lines below: alert staff with the raw answers.
     getQuestionsForVersionMock.mockResolvedValue(null);
     const { POST } = await import("@/app/api/submit/route");
 

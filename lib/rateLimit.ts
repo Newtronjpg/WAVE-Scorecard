@@ -1,19 +1,14 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
 
-// Throttles the public submit endpoint.
+// Throttles the public submit endpoint -- unauthenticated, and every call
+// writes a row and sends an email, so an unthrottled link is one script
+// away from a full database and a flooded inbox.
 //
-// /api/submit is unauthenticated and every call writes a row and sends an
-// email, so an unthrottled public link is one script away from a full
-// database and a flooded inbox.
-//
-// Fixed window rather than a sliding window or token bucket: the counter
-// is a single row, the logic is trivially testable, and the failure mode
-// of a fixed window (a burst straddling a boundary can briefly reach 2x
-// the limit) is irrelevant at these volumes. It is stored in Postgres
-// rather than memory because serverless instances do not share memory, so
-// an in-process counter would be bypassed simply by hitting a different
-// instance.
+// Fixed window, not sliding or token bucket: a single row, trivially
+// testable, and the boundary-burst failure mode is irrelevant at these
+// volumes. Stored in Postgres, not memory, since serverless instances
+// don't share memory.
 
 export const SUBMIT_MAX_PER_WINDOW = 10;
 export const SUBMIT_WINDOW_MS = 60 * 60 * 1000; // one hour

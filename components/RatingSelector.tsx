@@ -12,12 +12,9 @@ export function RatingSelector({
   value: number | undefined;
   onChange: (value: number) => void;
 }) {
-  // Tracks whichever number is being hovered/focused, used ONLY to preview
-  // a level's meaning before anything is picked. Once a value is committed,
-  // `shown` locks to it and ignores further hover/focus, so the caption
-  // below stops changing as the mouse moves around after an answer is
-  // chosen. Comparing options before choosing still works exactly as
-  // before, it just stops once you've actually answered.
+  // Previews a level's meaning on hover/focus before anything is picked.
+  // Once a value is committed, `shown` locks to it and ignores further
+  // hover/focus, so the caption stops moving after an answer is chosen.
   const [preview, setPreview] = useState<number | undefined>(undefined);
   const shown = value ?? preview;
   const shownLevel = question.levels.find((l) => l.value === shown);
@@ -34,11 +31,8 @@ export function RatingSelector({
         aria-label={question.statement}
         className="grid gap-2"
         style={{
-          // Tailwind's grid-cols-N classes are generated at build time, so
-          // an interpolated class name (grid-cols-${n}) would be purged
-          // and silently produce no columns. This question's choice count
-          // is no longer fixed at 5, so the column count has to be set
-          // inline instead.
+          // An interpolated Tailwind class (grid-cols-${n}) would be
+          // purged at build time, so this has to be inline.
           gridTemplateColumns: `repeat(${question.levels.length}, minmax(0, 1fr))`,
         }}
       >

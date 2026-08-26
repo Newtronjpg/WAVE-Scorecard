@@ -216,9 +216,9 @@ describe("validateQuestionSet rejects", () => {
   });
 
   it("reports a duplicate id even when the duplicate also has an invalid gap", () => {
-    // Finding 3: an invalid-gap question used to be dropped before the
-    // duplicate-id pass ran, so this duplicate went unreported until the
-    // gap was fixed and the set re-submitted.
+    // An invalid-gap question used to be dropped before the duplicate-id
+    // pass ran, so this duplicate went unreported until the gap was fixed
+    // and the set re-submitted.
     const set = validSet();
     const dupe = question("W1", "wealth");
     (dupe as { gap: string }).gap = "marketing";
@@ -231,9 +231,9 @@ describe("validateQuestionSet rejects", () => {
   });
 
   it("a circular input returns ok:false instead of throwing", () => {
-    // Finding 1: validateQuestionSet used to deep-copy via
-    // JSON.stringify, which throws on a circular structure. The function's
-    // signature promises unknown -> ValidateResult, never a throw.
+    // validateQuestionSet used to deep-copy via JSON.stringify, which
+    // throws on a circular structure. The function's signature promises
+    // unknown -> ValidateResult, never a throw.
     const set = validSet();
     (set[0] as unknown as Record<string, unknown>).self = set[0];
     expect(() => validateQuestionSet(set)).not.toThrow();

@@ -1,28 +1,12 @@
-// The assessment link itself is intentionally open (no login): it isn't
-// handling anything regulated. The admin view is different: it lists
-// every submission, including whatever name/company a prospect entered,
-// so it's passcode-gated.
+// The assessment itself is open (no login, nothing regulated). The admin
+// view lists every submission, so it's passcode-gated -- each staff member
+// gets their own named passcode in ADMIN_USERS ("Name:passcode", comma-
+// separated) rather than one shared secret, so access can be revoked per
+// person and the app can show who's logged in.
 //
-// Because several staff members need admin access, this is deliberately
-// NOT a single shared secret. Each person gets their own named passcode
-// in ADMIN_USERS, a comma-separated "Name:passcode" list, e.g.
-// ADMIN_USERS="Alex:first-passcode,Sam:second-passcode". Benefits over
-// one shared string: the app can show who's logged in, and revoking one
-// person's access later means deleting their entry, not changing the
-// passcode for everyone else too. It's still not full SSO, no
-// centralized identity provider, no per-person audit log beyond "who's
-// currently logged in", but it's a real step up from one secret the
-// whole team knows, and it's what's buildable without first coordinating
-// an Azure AD app registration with the firm's IT. That coordination is
-// worth doing for real Entra ID login later, if the firm already has
-// Microsoft 365; this is the reasonable interim.
-//
-// Comparison logic runs inside Next.js middleware, which executes on the
-// Edge runtime, not Node.js, on Vercel. Node's `crypto.timingSafeEqual`
-// isn't available there (a real deploy would fail, not just warn, if
-// this imported it), so it's written by hand from character codes
-// instead, working identically in middleware, in a normal API route, and
-// in a unit test.
+// This runs inside Next.js middleware on the Edge runtime, not Node, so
+// `crypto.timingSafeEqual` isn't available -- the comparison below is
+// written by hand from character codes instead.
 
 export const ADMIN_COOKIE_NAME = "wave_admin";
 
@@ -44,15 +28,10 @@ function timingSafeStringEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-// Defends against the most common way ADMIN_USERS gets mis-entered in a
-// hosting dashboard: surrounding quotes and stray whitespace. A .env file
-// needs the quotes (`ADMIN_USERS="Name:pass"`) and dotenv strips them,
-// but pasting that same quoted string into Vercel's UI stores the quotes
-// literally, which would otherwise make the passcode `pass"` (with a
-// trailing quote) and silently reject the clean value forever. Trimming
-// and stripping wrapping quotes on both the name and the passcode makes
-// either form work. A passcode intentionally beginning or ending with a
-// quote is not a realistic case and not worth preserving over this.
+// Strips wrapping quotes and whitespace: a .env file needs quotes
+// (`ADMIN_USERS="Name:pass"`) and dotenv strips them, but pasting the same
+// quoted string into a hosting dashboard's UI stores the quotes literally,
+// silently turning the passcode into `pass"` otherwise.
 function clean(value: string): string {
   return value.trim().replace(/^["']+|["']+$/g, "").trim();
 }
@@ -61,14 +40,9 @@ function getAdminUsers(): { name: string; passcode: string }[] {
   const raw = (process.env.ADMIN_USERS ?? "").trim();
   if (!raw) return [];
 
-  // Convenience for the common "ADMIN_USERS is just my password" mental
-  // model: if the entire value contains no colon at all, treat it as a
-  // single bare passcode and give it a default name. This rescues the
-  // easy mistake of setting ADMIN_USERS to a plain string like
-  // "wave-2020" (or "Admin-wave-2020") instead of "Name:passcode".
-  // A value that DOES contain a colon anywhere still uses strict
-  // comma-separated Name:passcode parsing below, so a stray token in a
-  // real list is skipped rather than becoming an accidental credential.
+  // A value with no colon at all is treated as a single bare passcode
+  // under a default name, rescuing the common mistake of setting
+  // ADMIN_USERS to a plain string instead of "Name:passcode".
   if (!raw.includes(":")) {
     const passcode = clean(raw);
     return passcode ? [{ name: "Admin", passcode }] : [];

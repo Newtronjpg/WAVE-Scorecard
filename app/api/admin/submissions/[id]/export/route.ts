@@ -6,10 +6,10 @@ import { resolveQuestions } from "@/lib/questionContent";
 import { QUESTIONS, type Question } from "@/lib/questions";
 
 // Reconstructs exactly what this run was scored against, preferring the
-// literal snapshot stored on the row (Task 5) since it needs no lookup and
-// can never drift -- falling back to the QuestionSetVersion table only for
-// older rows written before that column existed, and to the factory set as
-// the last resort when neither is available.
+// literal snapshot stored on the row since it needs no lookup and can
+// never drift -- falling back to the QuestionSetVersion table only for
+// older rows written before that column existed, and to the factory set
+// as the last resort when neither is available.
 async function resolveRunQuestions(
   snapshot: unknown,
   version: number | null

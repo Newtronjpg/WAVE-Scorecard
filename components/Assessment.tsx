@@ -29,14 +29,10 @@ const WIDEST_GAP_ADVICE: Record<Gap, string> = {
     "get a real read on how your margins compare to your industry, and start tracking the handful of numbers that actually explain the gap. It's hard to fix what hasn't been measured.",
 };
 
-// Questions arrive as a prop, resolved server-side, so admin edits show
-// up here without a redeploy. `version` is the published version that
-// produced this exact `questions` array (see app/page.tsx) -- it is
-// carried through submit untouched by anything that happens after this
-// component mounts, so a publish landing mid-assessment cannot change
-// what a submission gets scored and stamped against. Never re-derive it
-// from something that could drift (e.g. an id on a later-fetched
-// question); it must stay the value this component was handed at load.
+// Questions arrive as a prop, resolved server-side, so admin edits show up
+// without a redeploy. `version` is the published version that produced
+// this exact `questions` array, carried through submit untouched so a
+// publish landing mid-assessment can't change what gets scored against.
 export function Assessment({
   questions,
   version,
@@ -57,13 +53,9 @@ export function Assessment({
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Scroll to the top whenever the step changes.
-  //
-  // This runs in an effect, not inside the click handler, because a
-  // handler fires in the same tick as the state update: the scroll would
-  // start against the OLD section and then be cut off when React swapped
-  // the content in. "auto" rather than "smooth" for the same reason, and
-  // because animating up from the bottom of a long section reads as lag.
+  // Runs in an effect, not the click handler: a handler fires in the same
+  // tick as the state update, so the scroll would start against the old
+  // section and get cut off when React swaps the content in.
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [view, sectionIndex]);
@@ -95,8 +87,7 @@ export function Assessment({
           prospectName: prospectName.trim(),
           companyName: companyName.trim(),
           // The version loaded at the top of this component, not
-          // whatever might be published by now -- see the prop comment
-          // above and app/api/submit/route.ts for why.
+          // whatever might be published by now.
           questionSetVersion: version,
         }),
       });
@@ -141,7 +132,7 @@ export function Assessment({
     setView("intro");
   }
 
-  // ---------------------------------------------------------------- INTRO
+  // Intro
   if (view === "intro") {
     return (
       <IntroView
@@ -154,7 +145,7 @@ export function Assessment({
     );
   }
 
-  // -------------------------------------------------------------- RESULTS
+  // Results
   if (view === "results" && result) {
     return (
       <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
@@ -166,10 +157,6 @@ export function Assessment({
         </h1>
 
         {result.saved === false && (
-          // The scores below are real and correct, but this submission was
-          // never recorded. Saying so is the whole point: previously this
-          // looked identical to a successful save, so neither the prospect
-          // nor the firm knew anything had been lost.
           <div
             role="alert"
             className="mt-6 rounded-md border border-maroon bg-[var(--color-tint)] px-4 py-3"
@@ -233,7 +220,7 @@ export function Assessment({
     );
   }
 
-  // ------------------------------------------------------- SECTION / SUBMIT
+  // Section / submit
   return (
     <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
       <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
