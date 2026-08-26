@@ -49,6 +49,11 @@ export function Assessment({
   const [view, setView] = useState<View>("intro");
   const [sectionIndex, setSectionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  // Optional per-question context, keyed by question id like `answers`.
+  // Lives here rather than in RatingSelector so text typed in section 1
+  // survives navigating away and back -- the sections are one mounted
+  // component, and per-question state would be discarded on every Next.
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [prospectName, setProspectName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [result, setResult] = useState<ScoreResultShape | null>(null);
@@ -76,6 +81,10 @@ export function Assessment({
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   }
 
+  function setComment(questionId: string, value: string) {
+    setComments((prev) => ({ ...prev, [questionId]: value }));
+  }
+
   async function handleFinish() {
     setView("submitting");
     setError(null);
@@ -85,6 +94,7 @@ export function Assessment({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           answers,
+          comments,
           prospectName: prospectName.trim(),
           companyName: companyName.trim(),
           // The version loaded at the top of this component, not
@@ -127,6 +137,7 @@ export function Assessment({
 
   function handleStartOver() {
     setAnswers({});
+    setComments({});
     setSectionIndex(0);
     setResult(null);
     setError(null);
@@ -253,6 +264,8 @@ export function Assessment({
               question={q}
               value={answers[q.id]}
               onChange={(value) => setAnswer(q.id, value)}
+              comment={comments[q.id]}
+              onCommentChange={(value) => setComment(q.id, value)}
             />
           </div>
         ))}

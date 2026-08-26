@@ -45,6 +45,17 @@ model Submission {
   overallScore    Int
   readinessBand   String
 
+  // Optional free-text context the respondent attached to individual
+  // questions: { "W1": "we sold the building in 2024", ... }, keyed by the
+  // same question ids as `answers`. Only questions they actually wrote
+  // about appear here.
+  //
+  // Null rather than {} when they wrote nothing, so "wrote nothing" has one
+  // representation instead of two. Null on every row written before this
+  // column existed, which is honest -- those respondents were never offered
+  // the box, and a backfill would invent a silence they never chose.
+  comments Json?
+
   // Which published question set this run answered. Null means the
   // factory default, including every run taken before versioning existed.
   questionSetVersion Int?

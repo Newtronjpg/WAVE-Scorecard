@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import type { Submission } from "@prisma/client";
 import type { Question } from "./questions";
 import { normalizeAnswer } from "./scoring";
+import { commentsMap } from "./comments";
 
 // One run, fully expanded, against the question set that run actually
 // answered -- not today's. A question reworded or removed since must not
@@ -21,6 +22,7 @@ export async function buildRunWorkbook(
 
   const sheet = workbook.addWorksheet("Run");
   const answers = submission.answers as Record<string, number>;
+  const comments = commentsMap(submission.comments);
 
   sheet.addRow(["Prospect", submission.prospectName ?? ""]);
   sheet.addRow(["Company", submission.companyName ?? ""]);
@@ -46,6 +48,7 @@ export async function buildRunWorkbook(
     "Choice label",
     "Choice description",
     "Score",
+    "Notes",
   ]);
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: HEADER_TEXT } };
@@ -67,6 +70,7 @@ export async function buildRunWorkbook(
       level?.label ?? "",
       level?.description ?? "",
       answer !== undefined ? normalizeAnswer(answer, q.levels.length) : "",
+      comments[q.id] ?? "",
     ]);
   }
 
@@ -75,6 +79,10 @@ export async function buildRunWorkbook(
   sheet.getColumn(6).width = 45;
   sheet.getColumn(1).width = 12;
   sheet.getColumn(2).width = 12;
+  // Notes hold a paragraph of the respondent's own writing, so it wraps
+  // rather than running off behind the next column.
+  sheet.getColumn(8).width = 55;
+  sheet.getColumn(8).alignment = { wrapText: true, vertical: "top" };
 
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber <= headerRowNumber) return;

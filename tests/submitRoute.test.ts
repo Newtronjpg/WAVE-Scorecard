@@ -488,3 +488,204 @@ describe("POST /api/submit resolves the version that traveled with the request",
     expect(json.error).not.toMatch(/reload/i);
   });
 });
+
+// Comments are optional context the respondent attaches to individual
+// questions. They must never affect a score, must land keyed to the right
+// question, and must not be able to fail a submission -- losing five
+// minutes of answers over a stray note would be a bad trade.
+describe("POST /api/submit and per-question comments", () => {
+  it("persists comments keyed to the questions they were written against", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({
+        ...validBody,
+        comments: { W1: "we sold the building in 2024", A2: "new controller started in March" },
+      }) as never
+    );
+
+    expect(createMock.mock.calls[0][0].data.comments).toEqual({
+      W1: "we sold the building in 2024",
+      A2: "new controller started in March",
+    });
+  });
+
+  it("stores nothing when no comments are sent", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    // undefined, not {} -- Prisma omits the column entirely, leaving the
+    // database null. See lib/comments.ts for why {} is not a valid state.
+    expect(createMock.mock.calls[0][0].data.comments).toBeUndefined();
+  });
+
+  it("treats whitespace-only context as no context at all", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({ ...validBody, comments: { W1: "   \n  " } }) as never
+    );
+
+    expect(createMock.mock.calls[0][0].data.comments).toBeUndefined();
+  });
+
+  it("trims stored context", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({ ...validBody, comments: { W1: "  padded  " } }) as never
+    );
+
+    expect(createMock.mock.calls[0][0].data.comments).toEqual({ W1: "padded" });
+  });
+
+  it("drops a note against an unknown question instead of rejecting the submission", async () => {
+    // A publish landing mid-assessment can leave a stale client holding a
+    // note for a question that no longer exists. The answers still have
+    // to be recorded; the orphaned note has nowhere to display and goes.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(
+      submitRequest({
+        ...validBody,
+        comments: { W1: "keep this", GONE9: "question was deleted" },
+      }) as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(createMock.mock.calls[0][0].data.comments).toEqual({ W1: "keep this" });
+  });
+
+  it("truncates over-long context instead of failing the submission", async () => {
+    // The UI cap is enforced by truncation, not rejection: a stray paste
+    // must not cost the respondent five minutes of answers.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { MAX_COMMENT_LENGTH } = await import("@/lib/comments");
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(
+      submitRequest({
+        ...validBody,
+        comments: { W1: "x".repeat(MAX_COMMENT_LENGTH + 500) },
+      }) as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(createMock.mock.calls[0][0].data.comments.W1).toHaveLength(
+      MAX_COMMENT_LENGTH
+    );
+  });
+
+  it("rejects an abusive payload well above any real note", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { MAX_COMMENT_PAYLOAD_LENGTH } = await import("@/lib/comments");
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(
+      submitRequest({
+        ...validBody,
+        comments: { W1: "x".repeat(MAX_COMMENT_PAYLOAD_LENGTH + 1) },
+      }) as never
+    );
+
+    expect(res.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("does not let comments change any score", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const without = await POST(submitRequest(validBody) as never);
+    const a = await without.json();
+
+    createMock.mockReset().mockResolvedValue({ id: "def" });
+    const withComments = await POST(
+      submitRequest({ ...validBody, comments: { W1: "context" } }) as never
+    );
+    const b = await withComments.json();
+
+    expect(b.overallScore).toBe(a.overallScore);
+    expect(b.band.label).toBe(a.band.label);
+    expect(b.gaps).toEqual(a.gaps);
+  });
+
+  it("carries the respondent's context into the routine notification on success", async () => {
+    // This was missed the first time: the notification's comment block was
+    // written and unit-tested, but the route never passed comments to it,
+    // so context reached staff ONLY when a submission failed to save.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({ ...validBody, comments: { W1: "sold the building" } }) as never
+    );
+
+    expect(notifyMock).toHaveBeenCalled();
+    expect(notifyMock.mock.calls[0][0].comments).toEqual({
+      W1: "sold the building",
+    });
+  });
+
+  it("sends no comments field on the notification when none were written", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    expect(notifyMock.mock.calls[0][0].comments).toBeUndefined();
+  });
+
+  it("bounds context length on the alert path that runs before validation", async () => {
+    // The unresolved-version path emails raw body content without ever
+    // reaching the zod schema, so it does its own truncation.
+    const { MAX_COMMENT_LENGTH } = await import("@/lib/comments");
+    getQuestionsForVersionMock.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({
+        ...validBody,
+        questionSetVersion: 999999,
+        comments: { W1: "x".repeat(50_000) },
+      }) as never
+    );
+
+    expect(alertMock).toHaveBeenCalled();
+    expect(alertMock.mock.calls[0][0].comments.W1).toHaveLength(
+      MAX_COMMENT_LENGTH
+    );
+  });
+
+  it("carries the respondent's context into the alert when the write fails", async () => {
+    // This alert is the only surviving copy of a lost submission, so the
+    // respondent's own words have to be in it alongside the ratings.
+    createMock.mockRejectedValue(new Error("db down"));
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({ ...validBody, comments: { W1: "sold the building" } }) as never
+    );
+
+    expect(alertMock).toHaveBeenCalled();
+    expect(alertMock.mock.calls[0][0].comments).toEqual({ W1: "sold the building" });
+  });
+});

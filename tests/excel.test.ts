@@ -23,6 +23,7 @@ function fakeSubmission(overrides: Partial<Submission> = {}): Submission {
     prospectName: "Jane Owner",
     companyName: "Acme Fabrication",
     answers: { W1: 3 },
+    comments: null,
     wealthScore: 50,
     accountingScore: 75,
     valueScore: 50,
@@ -225,7 +226,7 @@ function runQuestionRows(sheet: ExcelJS.Worksheet) {
     const values = sheet.getRow(r).values as unknown[];
     if (values[idIdx]) rows.push(values);
   }
-  return { rows, idIdx, scoreIdx };
+  return { rows, idIdx, scoreIdx, headers };
 }
 
 describe("buildRunWorkbook", () => {
@@ -269,6 +270,34 @@ describe("buildRunWorkbook", () => {
     const { rows, idIdx, scoreIdx } = runQuestionRows(workbook.worksheets[0]);
     const w2Row = rows.find((r) => r[idIdx] === "W2")!;
     expect(w2Row[scoreIdx]).toBeFalsy();
+  });
+
+  it("carries the respondent's per-question context in a Notes column", async () => {
+    const submission = fakeSubmission({
+      answers: { W1: 3, W2: 1 },
+      comments: { W2: "we sold the building in 2024" },
+    });
+    const buffer = await buildRunWorkbook(submission, fakeRunQuestions(5), "version 3");
+    const workbook = await loadWorkbook(buffer);
+    const sheet = workbook.worksheets[0];
+    const { rows, idIdx, headers } = runQuestionRows(sheet);
+    const notesIdx = headers.findIndex((h) => h === "Notes");
+    expect(notesIdx).toBeGreaterThan(-1);
+
+    const w2 = rows.find((r) => r[idIdx] === "W2")!;
+    const w1 = rows.find((r) => r[idIdx] === "W1")!;
+    // Keyed to the right question, and only that one.
+    expect(w2[notesIdx]).toBe("we sold the building in 2024");
+    expect(w1[notesIdx]).toBeFalsy();
+  });
+
+  it("leaves Notes blank for a run with no context", async () => {
+    const submission = fakeSubmission({ answers: { W1: 3 }, comments: null });
+    const buffer = await buildRunWorkbook(submission, fakeRunQuestions(5), "version 3");
+    const workbook = await loadWorkbook(buffer);
+    const { rows, headers } = runQuestionRows(workbook.worksheets[0]);
+    const notesIdx = headers.findIndex((h) => h === "Notes");
+    for (const row of rows) expect(row[notesIdx]).toBeFalsy();
   });
 
   it("the header block carries prospect, company, overall score, band, and the version label", async () => {

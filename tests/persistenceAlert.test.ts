@@ -149,3 +149,57 @@ describe("sendPersistenceFailureAlert", () => {
     await expect(sendPersistenceFailureAlert(fakeDetails())).resolves.toBeDefined();
   });
 });
+
+// The respondent's own words are part of the lost submission. On this path
+// the email is the only surviving copy, so context has to travel with the
+// ratings or it is destroyed along with the row that was never written.
+describe("per-question context in the lost-submission alert", () => {
+  it("lists the context under the raw answers", () => {
+    const { text } = buildPersistenceFailureAlert({
+      ...fakeDetails(),
+      comments: { W1: "we sold the building in 2024" },
+    });
+    expect(text).toContain("Context the respondent added on 1 question:");
+    expect(text).toContain("W1: we sold the building in 2024");
+  });
+
+  it("pluralizes the count", () => {
+    const { text } = buildPersistenceFailureAlert({
+      ...fakeDetails(),
+      comments: { W1: "one", A1: "two" },
+    });
+    expect(text).toContain("Context the respondent added on 2 questions:");
+  });
+
+  it("leaves the body unchanged when there is no context", () => {
+    // A submission without comments must produce exactly the body this
+    // app sent before comments existed.
+    const stamp = (s: string) =>
+      s.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<when>");
+    const base = stamp(buildPersistenceFailureAlert(fakeDetails()).text);
+
+    const emptyCases: (Record<string, string> | undefined)[] = [
+      undefined,
+      {},
+      { W1: "" },
+      { W1: "   \n " },
+    ];
+    for (const empty of emptyCases) {
+      const { text } = buildPersistenceFailureAlert({
+        ...fakeDetails(),
+        comments: empty,
+      });
+      expect(stamp(text)).toBe(base);
+    }
+  });
+
+  it("carries context verbatim as plain text", () => {
+    // Plain-text body: markup is inert content here, and staff should see
+    // exactly what was submitted rather than something sanitized.
+    const { text } = buildPersistenceFailureAlert({
+      ...fakeDetails(),
+      comments: { W1: "<script>alert(1)</script>" },
+    });
+    expect(text).toContain("W1: <script>alert(1)</script>");
+  });
+});

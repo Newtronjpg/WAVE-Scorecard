@@ -56,10 +56,28 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, label: str
   }
 }
 
+// Renders the respondent's optional per-question context, or "" when they
+// left none, so a submission without comments produces a body byte-for-byte
+// identical to the one this app sent before comments existed.
+function commentSection(comments: Record<string, string> | undefined): string {
+  const entries = Object.entries(comments ?? {}).filter(
+    ([, text]) => text.trim().length > 0
+  );
+  if (entries.length === 0) return "";
+  const noun = entries.length === 1 ? "question" : "questions";
+  return `
+Context the respondent added on ${entries.length} ${noun}:
+${entries.map(([id, text]) => `  ${id}: ${text.trim()}`).join("\n")}
+`;
+}
+
 export interface NotificationDetails {
   prospectName: string;
   companyName: string;
   result: ScoreResult;
+  // Optional free text the respondent attached to individual questions,
+  // keyed by question id. Absent or empty renders nothing at all.
+  comments?: Record<string, string>;
   adminUrl: string;
   // Resolved by the caller from the admin-editable setting. Absent means
   // fall back to the NOTIFY_EMAIL environment variable.
@@ -122,6 +140,7 @@ export async function sendSubmissionNotification(
 
   try {
     const { prospectName, companyName, result } = details;
+    const comments = commentSection(details.comments);
 
     const gapLines = result.gaps
       .map((g) => `${g.name}: ${g.score}/100`)
@@ -137,7 +156,7 @@ Overall: ${result.overallScore}/100 (${result.band.label})
 ${gapLines}
 
 Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
-
+${comments}
 Full submission and export: ${details.adminUrl}`
     );
 
@@ -153,6 +172,10 @@ export interface PersistenceFailureDetails {
   companyName: string;
   recipients?: string[];
   answers: Record<string, number>;
+  // Optional per-question context. On this path the email is the only
+  // surviving copy of the submission, so the respondent's own words have
+  // to travel with the ratings or they are gone.
+  comments?: Record<string, string>;
   // Optional: absent when there is no score to report, e.g. the
   // question-set version this run answered could not be resolved at all
   // (app/api/submit/route.ts), so scoreAssessment was never called.
@@ -172,6 +195,7 @@ export function buildPersistenceFailureAlert(details: PersistenceFailureDetails)
   text: string;
 } {
   const { prospectName, companyName, answers, result, adminUrl, error } = details;
+  const comments = commentSection(details.comments);
 
   const reason = error instanceof Error ? error.message : String(error);
   const answerLines = Object.entries(answers)
@@ -215,7 +239,7 @@ ${scoreSection}
 
 Raw answers (question id = rating):
 ${answerLines}
-
+${comments}
 Why it failed:
   ${reason}
 

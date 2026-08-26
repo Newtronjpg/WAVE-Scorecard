@@ -3,6 +3,11 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { scoreAssessment } from "@/lib/scoring";
+import {
+  MAX_COMMENT_LENGTH,
+  MAX_COMMENT_PAYLOAD_LENGTH,
+  normalizeComments,
+} from "@/lib/comments";
 import { getPublishedQuestions, getQuestionsForVersion } from "@/lib/questionContent";
 import { toStored } from "@/lib/questionSet";
 import type { Question } from "@/lib/questions";
@@ -81,6 +86,29 @@ export async function POST(req: NextRequest) {
               )
             )
           : {};
+      // Comments ride along for the same reason the answers do. This is
+      // the one path where nothing is written, so context the respondent
+      // typed would otherwise be destroyed exactly when it matters most.
+      // validIds is unknowable here (the question set didn't resolve), so
+      // every string key is accepted and the alert reports what was sent.
+      // Truncated here as well as in normalizeComments: this path runs
+      // BEFORE the zod parse, so neither the payload ceiling nor the UI cap
+      // has been applied yet. Without the slice a scripted post could turn
+      // this alert into a multi-megabyte email and push the send past its
+      // timeout -- breaking the exact alert that exists to stop silent
+      // data loss.
+      const rawComments = bodyRecord.comments;
+      const commentsForAlert: Record<string, string> =
+        rawComments && typeof rawComments === "object" && !Array.isArray(rawComments)
+          ? Object.fromEntries(
+              Object.entries(rawComments as Record<string, unknown>)
+                .filter(
+                  (entry): entry is [string, string] =>
+                    typeof entry[1] === "string" && entry[1].trim().length > 0
+                )
+                .map(([id, text]) => [id, text.slice(0, MAX_COMMENT_LENGTH)])
+            )
+          : {};
       const prospectNameForAlert =
         typeof bodyRecord.prospectName === "string" ? bodyRecord.prospectName : "";
       const companyNameForAlert =
@@ -109,6 +137,7 @@ export async function POST(req: NextRequest) {
             companyName: companyNameForAlert,
             recipients,
             answers: answersForAlert,
+            comments: commentsForAlert,
             // No score exists on this path, so `result` is correctly
             // omitted rather than fabricated.
             adminUrl,
@@ -157,6 +186,15 @@ export async function POST(req: NextRequest) {
     // rather than trusting the client not to skip it.
     prospectName: z.string().trim().min(1, "Name is required.").max(200),
     companyName: z.string().trim().min(1, "Company is required.").max(200),
+    // Optional per-question context. Deliberately permissive: keys are
+    // filtered and values trimmed and truncated by normalizeComments
+    // below, not rejected here. A note must never be able to fail a
+    // submission -- neither an orphaned id from a set republished
+    // mid-assessment nor an over-long paste should cost the respondent
+    // five minutes of answers. The bound here is only an abuse ceiling.
+    comments: z
+      .record(z.string(), z.string().max(MAX_COMMENT_PAYLOAD_LENGTH))
+      .optional(),
     // Optional so an older cached client bundle that doesn't send it still
     // works via the live-published fallback above.
     questionSetVersion: z.number().int().nullable().optional(),
@@ -171,6 +209,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { answers, prospectName, companyName } = parsed.data;
+  const comments = normalizeComments(
+    parsed.data.comments,
+    questions.map((q) => q.id)
+  );
 
   let result;
   try {
@@ -205,6 +247,8 @@ export async function POST(req: NextRequest) {
         prospectName,
         companyName,
         answers,
+        // null, never {}, when nothing was written -- see lib/comments.ts.
+        comments: comments ?? undefined,
         wealthScore: wealth.score,
         accountingScore: accounting.score,
         valueScore: value.score,
@@ -238,6 +282,7 @@ export async function POST(req: NextRequest) {
         companyName,
         recipients,
         answers,
+        comments: comments ?? {},
         result,
         adminUrl,
         error: e,
@@ -262,6 +307,10 @@ export async function POST(req: NextRequest) {
       prospectName,
       companyName,
       result,
+      // Without this, context only ever reached staff when a submission
+      // FAILED to save -- on the happy path the note sat in the run export
+      // with nothing anywhere telling anyone to go download it.
+      comments: comments ?? undefined,
       adminUrl,
       recipients,
     });

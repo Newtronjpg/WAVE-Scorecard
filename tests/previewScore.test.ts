@@ -58,6 +58,27 @@ describe("POST /api/admin/preview-score", () => {
     expect(typeof json.overallScore).toBe("number");
   });
 
+  it("tolerates the per-question comments the shared Assessment component sends", async () => {
+    // /admin/preview reuses components/Assessment.tsx pointed at this
+    // route, so this endpoint receives whatever the real assessment
+    // posts -- comments included. It must ignore them, not 400, or
+    // adding a field to the public form silently breaks admin preview.
+    const { POST } = await import("@/app/api/admin/preview-score/route");
+    const res = await POST(
+      previewRequest({
+        answers: completeAnswers(),
+        comments: { W1: "context typed during a preview" },
+        prospectName: "Preview",
+        companyName: "Preview",
+        questionSetVersion: null,
+      }) as never
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(typeof json.overallScore).toBe("number");
+  });
+
   it("never writes a submission row", async () => {
     const { POST } = await import("@/app/api/admin/preview-score/route");
     await POST(previewRequest({ answers: completeAnswers() }) as never);
