@@ -294,14 +294,18 @@ export function Assessment({
             />
           </div>
         ))}
+        {/* Inside the same divide-y container as the questions, so it
+            inherits the rule above it and the identical vertical rhythm
+            rather than sitting apart as a tacked-on box. */}
+        {sectionIndex === GAPS.length - 1 && (
+          <div className="py-8 sm:py-9">
+            <FollowUpPrompt
+              value={followUpInterest}
+              onChange={setFollowUpInterest}
+            />
+          </div>
+        )}
       </div>
-
-      {sectionIndex === GAPS.length - 1 && (
-        <FollowUpPrompt
-          value={followUpInterest}
-          onChange={setFollowUpInterest}
-        />
-      )}
 
       <div className="mt-10 flex items-center justify-between">
         <button

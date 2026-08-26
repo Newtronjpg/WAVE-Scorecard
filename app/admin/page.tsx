@@ -35,7 +35,10 @@ export default async function AdminPage() {
       : null;
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-12">
+    // Wider than the public pages on purpose. Those cap at a reading
+    // column; this is a fourteen-column data table, and at max-w-4xl the
+    // last four columns fell off the end into a horizontal scroll.
+    <div className="mx-auto max-w-[1600px] px-5 py-12">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
@@ -94,27 +97,25 @@ export default async function AdminPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[var(--color-tint)] text-left">
-              <th className="px-3 py-2 font-medium">Submitted</th>
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Company</th>
               <th className="px-3 py-2 font-medium">Industry</th>
               <th className="px-3 py-2 font-medium">Email</th>
+              <th className="px-3 py-2 font-medium">Follow Up</th>
+              <th className="px-3 py-2 font-medium text-right">Overall</th>
               <th className="px-3 py-2 font-medium text-right">Wealth</th>
               <th className="px-3 py-2 font-medium text-right">Accounting</th>
               <th className="px-3 py-2 font-medium text-right">Value</th>
               <th className="px-3 py-2 font-medium text-right">Earnings</th>
-              <th className="px-3 py-2 font-medium text-right">Overall</th>
               <th className="px-3 py-2 font-medium">Band</th>
-              <th className="px-3 py-2 font-medium">Follow-up</th>
-              <th className="px-3 py-2 font-medium sr-only">Actions</th>
+              <th className="px-3 py-2 font-medium">Submitted</th>
+              <th className="px-3 py-2 font-medium">Export</th>
+              <th className="px-3 py-2 font-medium">Delete</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {submissions.map((s) => (
               <tr key={s.id}>
-                <td className="px-3 py-2 whitespace-nowrap text-ink-muted">
-                  {s.createdAt.toISOString().slice(0, 16).replace("T", " ")}
-                </td>
                 <td className="px-3 py-2">{s.prospectName ?? "-"}</td>
                 <td className="px-3 py-2">
                   <span className="inline-flex items-center gap-1.5">
@@ -148,13 +149,7 @@ export default async function AdminPage() {
                     "-"
                   )}
                 </td>
-                <td className="px-3 py-2 text-right">{s.wealthScore}</td>
-                <td className="px-3 py-2 text-right">{s.accountingScore}</td>
-                <td className="px-3 py-2 text-right">{s.valueScore}</td>
-                <td className="px-3 py-2 text-right">{s.earningsScore}</td>
-                <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>
-                <td className="px-3 py-2 text-ink-muted">{s.readinessBand}</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 whitespace-nowrap">
                   {s.followUpInterest === true ? (
                     <span className="rounded-full bg-maroon px-2 py-0.5 text-xs font-medium text-white">
                       Yes
@@ -165,13 +160,24 @@ export default async function AdminPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>
+                <td className="px-3 py-2 text-right">{s.wealthScore}</td>
+                <td className="px-3 py-2 text-right">{s.accountingScore}</td>
+                <td className="px-3 py-2 text-right">{s.valueScore}</td>
+                <td className="px-3 py-2 text-right">{s.earningsScore}</td>
+                <td className="px-3 py-2 text-ink-muted">{s.readinessBand}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-ink-muted">
+                  {s.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                </td>
+                <td className="px-3 py-2">
                   <a
                     href={`/api/admin/submissions/${s.id}/export`}
-                    className="mr-3 text-sm text-maroon hover:underline"
+                    className="text-sm text-maroon hover:underline"
                   >
                     Export
                   </a>
+                </td>
+                <td className="px-3 py-2">
                   <DeleteSubmissionButton
                     id={s.id}
                     label={`${s.prospectName ?? "this submission"}`}
@@ -181,7 +187,9 @@ export default async function AdminPage() {
             ))}
             {submissions.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-ink-muted">
+                {/* Spans every column; a stale number here leaves the empty
+                    state boxed into part of the table. */}
+                <td colSpan={14} className="px-3 py-8 text-center text-ink-muted">
                   No submissions yet. They&rsquo;ll show up here as soon as someone
                   finishes the assessment.
                 </td>
