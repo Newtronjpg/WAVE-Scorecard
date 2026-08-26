@@ -74,6 +74,10 @@ ${entries.map(([id, text]) => `  ${id}: ${text.trim()}`).join("\n")}
 export interface NotificationDetails {
   prospectName: string;
   companyName: string;
+  // Collected on the landing page. Optional on the type so a caller that
+  // predates these fields still compiles; rendered only when present.
+  email?: string;
+  industry?: string;
   result: ScoreResult;
   // Optional free text the respondent attached to individual questions,
   // keyed by question id. Absent or empty renders nothing at all.
@@ -141,6 +145,12 @@ export async function sendSubmissionNotification(
   try {
     const { prospectName, companyName, result } = details;
     const comments = commentSection(details.comments);
+    const contact = [
+      details.email ? `Email:    ${details.email}` : "",
+      details.industry ? `Industry: ${details.industry}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const gapLines = result.gaps
       .map((g) => `${g.name}: ${g.score}/100`)
@@ -150,7 +160,7 @@ export async function sendSubmissionNotification(
       config,
       `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
       `${prospectName} at ${companyName} just finished the WAVE Scorecard.
-
+${contact ? `\n${contact}\n` : ""}
 Overall: ${result.overallScore}/100 (${result.band.label})
 
 ${gapLines}
@@ -172,6 +182,8 @@ export interface PersistenceFailureDetails {
   companyName: string;
   recipients?: string[];
   answers: Record<string, number>;
+  email?: string;
+  industry?: string;
   // Optional per-question context. On this path the email is the only
   // surviving copy of the submission, so the respondent's own words have
   // to travel with the ratings or they are gone.
@@ -232,7 +244,9 @@ table and it will not appear in the Excel export. Save it somewhere
 before deleting this message.
 
 Prospect: ${prospectName}
-Company:  ${companyName}
+Company:  ${companyName}${details.email ? `\nEmail:    ${details.email}` : ""}${
+      details.industry ? `\nIndustry: ${details.industry}` : ""
+    }
 When:     ${new Date().toISOString()}
 
 ${scoreSection}

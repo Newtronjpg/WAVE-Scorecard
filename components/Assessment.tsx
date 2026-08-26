@@ -6,6 +6,7 @@ import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
+import { resolveIndustry } from "@/lib/contact";
 
 type ScoreResultShape = {
   overallScore: number;
@@ -56,6 +57,12 @@ export function Assessment({
   const [comments, setComments] = useState<Record<string, string>>({});
   const [prospectName, setProspectName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [email, setEmail] = useState("");
+  // The industry control is two inputs -- a select, plus a free-text box
+  // shown only for "Other" -- so both halves are held here and collapsed
+  // to one stored string by resolveIndustry at submit time.
+  const [industry, setIndustry] = useState("");
+  const [industryOther, setIndustryOther] = useState("");
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +104,8 @@ export function Assessment({
           comments,
           prospectName: prospectName.trim(),
           companyName: companyName.trim(),
+          email: email.trim(),
+          industry: resolveIndustry(industry, industryOther),
           // The version loaded at the top of this component, not
           // whatever might be published by now.
           questionSetVersion: version,
@@ -138,6 +147,9 @@ export function Assessment({
   function handleStartOver() {
     setAnswers({});
     setComments({});
+    // Name, company, email, and industry deliberately persist: "Start
+    // over" retakes the assessment, it does not become a different
+    // person, and re-typing all four is pure friction.
     setSectionIndex(0);
     setResult(null);
     setError(null);
@@ -150,8 +162,14 @@ export function Assessment({
       <IntroView
         prospectName={prospectName}
         companyName={companyName}
+        email={email}
+        industry={industry}
+        industryOther={industryOther}
         onProspectNameChange={setProspectName}
         onCompanyNameChange={setCompanyName}
+        onEmailChange={setEmail}
+        onIndustryChange={setIndustry}
+        onIndustryOtherChange={setIndustryOther}
         onStart={() => setView("section")}
       />
     );

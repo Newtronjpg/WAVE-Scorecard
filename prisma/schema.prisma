@@ -29,6 +29,17 @@ model Submission {
   prospectName String?
   companyName  String?
 
+  // Collected on the landing page alongside name and company. Required by
+  // the form and by /api/submit, but nullable here: every row written
+  // before these fields existed genuinely has no value, and inventing a
+  // placeholder would make "not asked" indistinguishable from "declined".
+  email    String?
+  // One of lib/contact.ts's INDUSTRY_OPTIONS, or "Other: <free text>".
+  // Stored as the resolved string rather than a foreign key: the list is
+  // presentation, and a run should keep the label it was actually shown
+  // even if the options are edited later.
+  industry String?
+
   // Raw answers: { "W1": 4, "W2": 2, ... } keyed by whichever question ids
   // were live when this run was scored -- the set is admin-editable, not
   // fixed, so its size and shape vary from one submission to the next.

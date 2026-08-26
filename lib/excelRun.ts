@@ -26,6 +26,8 @@ export async function buildRunWorkbook(
 
   sheet.addRow(["Prospect", submission.prospectName ?? ""]);
   sheet.addRow(["Company", submission.companyName ?? ""]);
+  sheet.addRow(["Email", submission.email ?? ""]);
+  sheet.addRow(["Industry", submission.industry ?? ""]);
   sheet.addRow([
     "Submitted",
     submission.createdAt.toISOString().replace("T", " ").slice(0, 19),

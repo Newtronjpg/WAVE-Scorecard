@@ -96,6 +96,8 @@ export default async function AdminPage() {
               <th className="px-3 py-2 font-medium">Submitted</th>
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Company</th>
+              <th className="px-3 py-2 font-medium">Industry</th>
+              <th className="px-3 py-2 font-medium">Email</th>
               <th className="px-3 py-2 font-medium text-right">Wealth</th>
               <th className="px-3 py-2 font-medium text-right">Accounting</th>
               <th className="px-3 py-2 font-medium text-right">Value</th>
@@ -133,6 +135,16 @@ export default async function AdminPage() {
                       </span>
                     )}
                   </span>
+                </td>
+                <td className="px-3 py-2 text-ink-muted">{s.industry ?? "-"}</td>
+                <td className="px-3 py-2 text-ink-muted">
+                  {s.email ? (
+                    <a href={`mailto:${s.email}`} className="hover:underline">
+                      {s.email}
+                    </a>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">{s.wealthScore}</td>
                 <td className="px-3 py-2 text-right">{s.accountingScore}</td>

@@ -70,6 +70,8 @@ export async function buildSubmissionsWorkbook(
     { header: "Earnings score", key: "earningsScore", width: 14 },
     { header: "Overall score", key: "overallScore", width: 13 },
     { header: "Readiness band", key: "readinessBand", width: 18 },
+    { header: "Email", key: "email", width: 28 },
+    { header: "Industry", key: "industry", width: 24 },
     { header: "Question set", key: "questionSetVersion", width: 12 },
   ];
 
@@ -85,6 +87,8 @@ export async function buildSubmissionsWorkbook(
       valueScore: s.valueScore,
       earningsScore: s.earningsScore,
       overallScore: s.overallScore,
+      email: s.email ?? "",
+      industry: s.industry ?? "",
       readinessBand: s.readinessBand,
       questionSetVersion: s.questionSetVersion ?? "factory",
     });

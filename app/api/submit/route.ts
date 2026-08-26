@@ -8,6 +8,12 @@ import {
   MAX_COMMENT_PAYLOAD_LENGTH,
   normalizeComments,
 } from "@/lib/comments";
+import {
+  MAX_EMAIL_LENGTH,
+  MAX_INDUSTRY_LENGTH,
+  isPlausibleEmail,
+  isValidIndustry,
+} from "@/lib/contact";
 import { getPublishedQuestions, getQuestionsForVersion } from "@/lib/questionContent";
 import { toStored } from "@/lib/questionSet";
 import type { Question } from "@/lib/questions";
@@ -186,6 +192,22 @@ export async function POST(req: NextRequest) {
     // rather than trusting the client not to skip it.
     prospectName: z.string().trim().min(1, "Name is required.").max(200),
     companyName: z.string().trim().min(1, "Company is required.").max(200),
+    // Required by the landing page, so enforced here too rather than
+    // trusting the client not to skip it -- same rule as name and company.
+    email: z
+      .string()
+      .trim()
+      .max(MAX_EMAIL_LENGTH)
+      .refine(isPlausibleEmail, "A valid email address is required."),
+    // Must be one of the published options, or a described "Other". The
+    // dropdown is the only thing enforcing that in the browser, and a
+    // hand-crafted request would otherwise put uncomparable free text
+    // into the column the picklist exists to keep comparable.
+    industry: z
+      .string()
+      .trim()
+      .max(MAX_INDUSTRY_LENGTH + 16)
+      .refine(isValidIndustry, "Please choose your industry."),
     // Optional per-question context. Deliberately permissive: keys are
     // filtered and values trimmed and truncated by normalizeComments
     // below, not rejected here. A note must never be able to fail a
@@ -208,7 +230,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { answers, prospectName, companyName } = parsed.data;
+  const { answers, prospectName, companyName, email, industry } = parsed.data;
   const comments = normalizeComments(
     parsed.data.comments,
     questions.map((q) => q.id)
@@ -246,6 +268,8 @@ export async function POST(req: NextRequest) {
       data: {
         prospectName,
         companyName,
+        email,
+        industry,
         answers,
         // null, never {}, when nothing was written -- see lib/comments.ts.
         comments: comments ?? undefined,
@@ -280,6 +304,8 @@ export async function POST(req: NextRequest) {
       await sendPersistenceFailureAlert({
         prospectName,
         companyName,
+        email,
+        industry,
         recipients,
         answers,
         comments: comments ?? {},
@@ -306,6 +332,8 @@ export async function POST(req: NextRequest) {
     notification = await sendSubmissionNotification({
       prospectName,
       companyName,
+      email,
+      industry,
       result,
       // Without this, context only ever reached staff when a submission
       // FAILED to save -- on the happy path the note sat in the run export

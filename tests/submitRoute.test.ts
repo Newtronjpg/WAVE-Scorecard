@@ -70,6 +70,8 @@ const validBody = {
   answers: completeAnswers(),
   prospectName: "Jane Owner",
   companyName: "Acme Fabrication",
+  email: "jane@acmefabrication.com",
+  industry: "Manufacturing",
 };
 
 beforeEach(() => {
@@ -687,5 +689,110 @@ describe("POST /api/submit and per-question comments", () => {
 
     expect(alertMock).toHaveBeenCalled();
     expect(alertMock.mock.calls[0][0].comments).toEqual({ W1: "sold the building" });
+  });
+});
+
+// Email and industry are collected on the landing page and required there,
+// so the API enforces the same rule rather than trusting the client. The
+// industry check also defends the picklist: its whole value is comparable
+// values, and in the browser only the dropdown enforces that.
+describe("POST /api/submit and the respondent's contact details", () => {
+  it("persists the email and industry", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    const data = createMock.mock.calls[0][0].data;
+    expect(data.email).toBe("jane@acmefabrication.com");
+    expect(data.industry).toBe("Manufacturing");
+  });
+
+  it("accepts a described Other industry", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(
+      submitRequest({ ...validBody, industry: "Other: Marine salvage" }) as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(createMock.mock.calls[0][0].data.industry).toBe("Other: Marine salvage");
+  });
+
+  it.each([
+    ["a missing email", { email: undefined }],
+    ["an empty email", { email: "" }],
+    ["a malformed email", { email: "jane@acme" }],
+    ["a missing industry", { industry: undefined }],
+    ["an empty industry", { industry: "" }],
+    ["an undescribed Other", { industry: "Other" }],
+    ["an industry not on the list", { industry: "Invented Category" }],
+  ])("rejects %s without writing a row", async (_label, patch) => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const res = await POST(submitRequest({ ...validBody, ...patch }) as never);
+
+    expect(res.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("trims the email before storing it", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(
+      submitRequest({ ...validBody, email: "  jane@acme.com  " }) as never
+    );
+
+    expect(createMock.mock.calls[0][0].data.email).toBe("jane@acme.com");
+  });
+
+  it("carries the contact details into the notification email", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    expect(notifyMock.mock.calls[0][0].email).toBe("jane@acmefabrication.com");
+    expect(notifyMock.mock.calls[0][0].industry).toBe("Manufacturing");
+  });
+
+  it("carries the contact details into the alert when the write fails", async () => {
+    createMock.mockRejectedValue(new Error("db down"));
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest(validBody) as never);
+
+    expect(alertMock.mock.calls[0][0].email).toBe("jane@acmefabrication.com");
+    expect(alertMock.mock.calls[0][0].industry).toBe("Manufacturing");
+  });
+
+  it("does not let contact details change any score", async () => {
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const a = await (await POST(submitRequest(validBody) as never)).json();
+    createMock.mockReset().mockResolvedValue({ id: "def" });
+    const b = await (
+      await POST(
+        submitRequest({
+          ...validBody,
+          email: "someone.else@other.com",
+          industry: "Healthcare",
+        }) as never
+      )
+    ).json();
+
+    expect(b.overallScore).toBe(a.overallScore);
+    expect(b.gaps).toEqual(a.gaps);
   });
 });

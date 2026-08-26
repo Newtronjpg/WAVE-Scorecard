@@ -24,6 +24,8 @@ function fakeSubmission(overrides: Partial<Submission> = {}): Submission {
     companyName: "Acme Fabrication",
     answers: { W1: 3 },
     comments: null,
+    email: "jane@acmefabrication.com",
+    industry: "Manufacturing",
     wealthScore: 50,
     accountingScore: 75,
     valueScore: 50,
@@ -270,6 +272,41 @@ describe("buildRunWorkbook", () => {
     const { rows, idIdx, scoreIdx } = runQuestionRows(workbook.worksheets[0]);
     const w2Row = rows.find((r) => r[idIdx] === "W2")!;
     expect(w2Row[scoreIdx]).toBeFalsy();
+  });
+
+  it("carries the email and industry in the run header block", async () => {
+    const submission = fakeSubmission({ answers: { W1: 3 } });
+    const buffer = await buildRunWorkbook(submission, fakeRunQuestions(5), "version 3");
+    const workbook = await loadWorkbook(buffer);
+    const text = JSON.stringify(workbook.worksheets[0].getSheetValues());
+    expect(text).toContain("jane@acmefabrication.com");
+    expect(text).toContain("Manufacturing");
+  });
+
+  it("renders blank rather than the word undefined for a run predating those fields", async () => {
+    const submission = fakeSubmission({
+      answers: { W1: 3 },
+      email: null,
+      industry: null,
+    });
+    const buffer = await buildRunWorkbook(submission, fakeRunQuestions(5), "version 3");
+    const workbook = await loadWorkbook(buffer);
+    const sheet = workbook.worksheets[0];
+    // Assert the cells themselves. getSheetValues pads its arrays with
+    // nulls because rows and columns are 1-indexed, so searching the
+    // serialized blob for "null" tests ExcelJS, not this code.
+    const labelled = (label: string) => {
+      for (let r = 1; r <= sheet.rowCount; r++) {
+        const values = sheet.getRow(r).values as unknown[];
+        if (values[1] === label) return values[2];
+      }
+      throw new Error(`No "${label}" row`);
+    };
+    for (const label of ["Email", "Industry"]) {
+      const cell = labelled(label);
+      expect(cell === "" || cell === undefined).toBe(true);
+      expect(String(cell ?? "")).not.toContain("undefined");
+    }
   });
 
   it("carries the respondent's per-question context in a Notes column", async () => {

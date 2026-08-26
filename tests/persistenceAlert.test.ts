@@ -203,3 +203,24 @@ describe("per-question context in the lost-submission alert", () => {
     expect(text).toContain("W1: <script>alert(1)</script>");
   });
 });
+
+describe("contact details in the lost-submission alert", () => {
+  it("names the email and industry so the prospect is reachable", () => {
+    // This email is the only surviving copy of the submission, so the way
+    // to contact the person has to be in it.
+    const { text } = buildPersistenceFailureAlert({
+      ...fakeDetails(),
+      email: "jane@acmefabrication.com",
+      industry: "Manufacturing",
+    });
+    expect(text).toContain("jane@acmefabrication.com");
+    expect(text).toContain("Manufacturing");
+  });
+
+  it("omits the lines entirely for a run that has neither", () => {
+    const { text } = buildPersistenceFailureAlert(fakeDetails());
+    expect(text).not.toContain("Email:");
+    expect(text).not.toContain("Industry:");
+    expect(text).not.toContain("undefined");
+  });
+});
