@@ -263,6 +263,68 @@ Admin: ${adminUrl}`,
   };
 }
 
+export interface FollowUpRequestDetails {
+  prospectName: string;
+  companyName: string;
+  email?: string;
+  industry?: string;
+  overallScore: number;
+  readinessBand: string;
+  adminUrl: string;
+  recipients?: string[];
+}
+
+// Builds the "they want to talk" email. Kept separate from sending so the
+// content is testable without SMTP, like the other two.
+//
+// This is the only signal staff get that someone opted in: the submission
+// notification is sent before the results page even renders the question.
+export function buildFollowUpRequest(details: FollowUpRequestDetails): {
+  subject: string;
+  text: string;
+} {
+  const { prospectName, companyName, overallScore, readinessBand } = details;
+  const contact = [
+    details.email ? `Email:    ${details.email}` : "",
+    details.industry ? `Industry: ${details.industry}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    subject: `${prospectName} (${companyName}) wants a conversation`,
+    text: `${prospectName} at ${companyName} finished the WAVE Scorecard and
+asked to discuss the results with someone from the team.
+
+They have already been told someone will reach out to find a convenient
+time, so this is a commitment already made on our behalf.
+
+Score:    ${overallScore}/100 (${readinessBand})
+${contact}
+
+Full submission and export: ${details.adminUrl}`,
+  };
+}
+
+// Never throws, for the same reason the other senders don't: the answer
+// is already recorded, and a mail failure must not surface to the person
+// who just asked to be contacted.
+export async function sendFollowUpRequest(
+  details: FollowUpRequestDetails
+): Promise<{ sent: boolean; reason?: string }> {
+  const config = resolveMailConfig(details.recipients);
+  if (!config) return { sent: false, reason: "not configured" };
+
+  try {
+    const { subject, text } = buildFollowUpRequest(details);
+    await deliver(config, subject, text);
+    return { sent: true };
+  } catch (e) {
+    console.error("Failed to send follow-up request email:", e);
+    return { sent: false, reason: e instanceof Error ? e.message : "unknown error" };
+  }
+}
+
 // Alerts staff that a submission was lost. Mirrors the contract of
 // sendSubmissionNotification: never throws, always reports what happened,
 // so a failure to alert can never mask the original persistence failure

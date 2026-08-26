@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { followUpLabel } from "./followUp";
 import type { Submission } from "@prisma/client";
 import type { StoredQuestion } from "./questionSet";
 
@@ -72,6 +73,7 @@ export async function buildSubmissionsWorkbook(
     { header: "Readiness band", key: "readinessBand", width: 18 },
     { header: "Email", key: "email", width: 28 },
     { header: "Industry", key: "industry", width: 24 },
+    { header: "Follow-up", key: "followUp", width: 14 },
     { header: "Question set", key: "questionSetVersion", width: 12 },
   ];
 
@@ -89,6 +91,7 @@ export async function buildSubmissionsWorkbook(
       overallScore: s.overallScore,
       email: s.email ?? "",
       industry: s.industry ?? "",
+      followUp: followUpLabel(s.followUpInterest),
       readinessBand: s.readinessBand,
       questionSetVersion: s.questionSetVersion ?? "factory",
     });

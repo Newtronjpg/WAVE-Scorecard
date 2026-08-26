@@ -3,6 +3,7 @@ import type { Submission } from "@prisma/client";
 import type { Question } from "./questions";
 import { normalizeAnswer } from "./scoring";
 import { commentsMap } from "./comments";
+import { followUpLabel } from "./followUp";
 
 // One run, fully expanded, against the question set that run actually
 // answered -- not today's. A question reworded or removed since must not
@@ -39,6 +40,7 @@ export async function buildRunWorkbook(
   sheet.addRow(["Earnings score", submission.earningsScore]);
   sheet.addRow(["Overall score", submission.overallScore]);
   sheet.addRow(["Readiness band", submission.readinessBand]);
+  sheet.addRow(["Follow-up requested", followUpLabel(submission.followUpInterest)]);
   sheet.addRow([]);
 
   const headerRowNumber = sheet.rowCount + 1;

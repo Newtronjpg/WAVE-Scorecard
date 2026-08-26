@@ -7,6 +7,7 @@ import { DeleteSubmissionButton } from "@/components/DeleteSubmissionButton";
 import { ADMIN_COOKIE_NAME, matchAdminUser } from "@/lib/adminAuth";
 import { getNotifyRecipientsRaw } from "@/lib/settings";
 import { commentCount } from "@/lib/comments";
+import { followUpLabel } from "@/lib/followUp";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,7 @@ export default async function AdminPage() {
               <th className="px-3 py-2 font-medium text-right">Earnings</th>
               <th className="px-3 py-2 font-medium text-right">Overall</th>
               <th className="px-3 py-2 font-medium">Band</th>
+              <th className="px-3 py-2 font-medium">Follow-up</th>
               <th className="px-3 py-2 font-medium sr-only">Actions</th>
             </tr>
           </thead>
@@ -152,6 +154,17 @@ export default async function AdminPage() {
                 <td className="px-3 py-2 text-right">{s.earningsScore}</td>
                 <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>
                 <td className="px-3 py-2 text-ink-muted">{s.readinessBand}</td>
+                <td className="px-3 py-2">
+                  {s.followUpInterest === true ? (
+                    <span className="rounded-full bg-maroon px-2 py-0.5 text-xs font-medium text-white">
+                      Yes
+                    </span>
+                  ) : (
+                    <span className="text-ink-muted">
+                      {followUpLabel(s.followUpInterest) || "-"}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right">
                   <a
                     href={`/api/admin/submissions/${s.id}/export`}

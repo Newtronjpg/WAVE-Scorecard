@@ -228,3 +228,49 @@ describe("sendSubmissionNotification", () => {
     expect(outcome.sent).toBe(false);
   }, 15000);
 });
+
+describe("buildFollowUpRequest", () => {
+  it("names who wants to talk, their score, and how to reach them", async () => {
+    const { buildFollowUpRequest } = await import("@/lib/email");
+    const { subject, text } = buildFollowUpRequest({
+      prospectName: "Jane Owner",
+      companyName: "Acme Fabrication",
+      email: "jane@acme.com",
+      industry: "Manufacturing",
+      overallScore: 67,
+      readinessBand: "Good",
+      adminUrl: "https://wave.example.com/admin",
+    });
+
+    expect(subject).toBe("Jane Owner (Acme Fabrication) wants a conversation");
+    expect(text).toContain("jane@acme.com");
+    expect(text).toContain("Manufacturing");
+    expect(text).toContain("67/100 (Good)");
+    expect(text).toContain("https://wave.example.com/admin");
+  });
+
+  it("says the commitment has already been made, so nobody treats it as optional", async () => {
+    const { buildFollowUpRequest } = await import("@/lib/email");
+    const { text } = buildFollowUpRequest({
+      prospectName: "Jane Owner",
+      companyName: "Acme Fabrication",
+      overallScore: 67,
+      readinessBand: "Good",
+      adminUrl: "https://wave.example.com/admin",
+    });
+    expect(text).toContain("already been told someone will reach out");
+  });
+
+  it("omits contact lines it does not have rather than printing undefined", async () => {
+    const { buildFollowUpRequest } = await import("@/lib/email");
+    const { text } = buildFollowUpRequest({
+      prospectName: "Jane Owner",
+      companyName: "Acme Fabrication",
+      overallScore: 67,
+      readinessBand: "Good",
+      adminUrl: "https://wave.example.com/admin",
+    });
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("Email:");
+  });
+});

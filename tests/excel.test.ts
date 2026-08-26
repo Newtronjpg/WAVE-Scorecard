@@ -26,6 +26,7 @@ function fakeSubmission(overrides: Partial<Submission> = {}): Submission {
     comments: null,
     email: "jane@acmefabrication.com",
     industry: "Manufacturing",
+    followUpInterest: null,
     wealthScore: 50,
     accountingScore: 75,
     valueScore: 50,
@@ -272,6 +273,35 @@ describe("buildRunWorkbook", () => {
     const { rows, idIdx, scoreIdx } = runQuestionRows(workbook.worksheets[0]);
     const w2Row = rows.find((r) => r[idIdx] === "W2")!;
     expect(w2Row[scoreIdx]).toBeFalsy();
+  });
+
+  it("shows the follow-up answer, distinguishing a no from no answer", async () => {
+    // "Didn't answer" and "said no" are different for follow-up, so the
+    // export must not collapse them into one blank cell.
+    const cases: [boolean | null, string][] = [
+      [true, "Yes"],
+      [false, "Not at this time"],
+    ];
+    for (const [value, expected] of cases) {
+      const buffer = await buildRunWorkbook(
+        fakeSubmission({ answers: { W1: 3 }, followUpInterest: value }),
+        fakeRunQuestions(5),
+        "version 3"
+      );
+      const workbook = await loadWorkbook(buffer);
+      const text = JSON.stringify(workbook.worksheets[0].getSheetValues());
+      expect(text).toContain(expected);
+    }
+
+    const unanswered = await buildRunWorkbook(
+      fakeSubmission({ answers: { W1: 3 }, followUpInterest: null }),
+      fakeRunQuestions(5),
+      "version 3"
+    );
+    const wb = await loadWorkbook(unanswered);
+    const text = JSON.stringify(wb.worksheets[0].getSheetValues());
+    expect(text).not.toContain("Not at this time");
+    expect(text).not.toContain("undefined");
   });
 
   it("carries the email and industry in the run header block", async () => {

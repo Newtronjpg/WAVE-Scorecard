@@ -67,6 +67,15 @@ model Submission {
   // the box, and a backfill would invent a silence they never chose.
   comments Json?
 
+  // Whether the respondent asked to talk to someone, answered on the
+  // results page AFTER this row is written (see /api/follow-up).
+  //
+  // Three states, so null is meaningful: null = never answered or the
+  // question predates them, true = wants a conversation, false = declined
+  // for now. A default of false would make "didn't answer" indistinguish-
+  // able from "said no", and those are very different for follow-up.
+  followUpInterest Boolean?
+
   // Which published question set this run answered. Null means the
   // factory default, including every run taken before versioning existed.
   questionSetVersion Int?

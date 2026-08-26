@@ -257,6 +257,9 @@ export async function POST(req: NextRequest) {
   // Resolved before the write so the failure alert can still reach
   // someone if the write itself is what fails.
   const recipients = await getNotifyRecipients();
+  // Null when the write failed; the results page hides the follow-up
+  // question rather than offering an answer it cannot record.
+  let submissionId: string | null = null;
   let saved = true;
   let notification: { sent: boolean; reason?: string } = {
     sent: false,
@@ -264,7 +267,7 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    await db.submission.create({
+    const created = await db.submission.create({
       data: {
         prospectName,
         companyName,
@@ -290,7 +293,11 @@ export async function POST(req: NextRequest) {
         // ever unreadable. See prisma/schema.prisma for the full rationale.
         questionSetSnapshot: toStored(questions) as unknown as Prisma.InputJsonValue,
       },
+      // The results page needs this to record the follow-up answer, which
+      // is given after this row already exists.
+      select: { id: true },
     });
+    submissionId = created.id;
   } catch (e) {
     // The person taking the assessment should still see their results
     // even if the save fails -- but a swallowed failure here once lost
@@ -353,7 +360,7 @@ export async function POST(req: NextRequest) {
   // client. `saved` ships in production too: the client needs it to tell
   // the person their results weren't recorded.
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ ...result, saved });
+    return NextResponse.json({ ...result, saved, submissionId });
   }
-  return NextResponse.json({ ...result, saved, _notification: notification });
+  return NextResponse.json({ ...result, saved, submissionId, _notification: notification });
 }

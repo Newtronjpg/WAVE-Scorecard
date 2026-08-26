@@ -6,6 +6,7 @@ import { RatingSelector } from "./RatingSelector";
 import { GapScoreBar } from "./GapScoreBar";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
+import { FollowUpPrompt } from "./FollowUpPrompt";
 import { resolveIndustry } from "@/lib/contact";
 
 type ScoreResultShape = {
@@ -16,6 +17,8 @@ type ScoreResultShape = {
   // False when the score was computed but could not be written to the
   // database. Optional so an older cached client bundle still renders.
   saved?: boolean;
+  // The row the follow-up answer attaches to. Null when the write failed.
+  submissionId?: string | null;
 };
 
 type View = "intro" | "section" | "submitting" | "results";
@@ -232,6 +235,10 @@ export function Assessment({
             you do one thing this year, {WIDEST_GAP_ADVICE[result.widestGap.gap]}
           </p>
         </div>
+
+        {result.submissionId && (
+          <FollowUpPrompt submissionId={result.submissionId} />
+        )}
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
           <button
