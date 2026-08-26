@@ -243,8 +243,8 @@ export async function sendPersistenceFailureAlert(
     console.error(
       "[WAVE ALERT] Submission could not be saved AND no alert could be sent " +
         "(GMAIL_USER / GMAIL_APP_PASSWORD / NOTIFY_EMAIL are not configured). " +
-        "The lost submission follows:\n" +
-        text
+        "The lost submission follows:\n%s",
+      text
     );
     return { sent: false, reason: "not configured" };
   }
@@ -255,8 +255,8 @@ export async function sendPersistenceFailureAlert(
   } catch (e) {
     console.error(
       "[WAVE ALERT] Submission could not be saved AND the alert email failed to " +
-        "send. The lost submission follows:\n" +
-        text,
+        "send. The lost submission follows:\n%s",
+      text,
       e
     );
     return { sent: false, reason: e instanceof Error ? e.message : "unknown error" };
