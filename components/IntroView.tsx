@@ -191,10 +191,6 @@ export function IntroView({
         your anonymized responses for research and analysis. Your identity and
         individual information will remain confidential.
       </p>
-
-      <p className="mt-6 text-xs text-ink-muted">
-        An advisory diagnostic.
-      </p>
     </div>
   );
 }

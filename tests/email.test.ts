@@ -14,17 +14,19 @@ const ORIGINAL_ENV = {
   NOTIFY_EMAIL: process.env.NOTIFY_EMAIL,
 };
 
+const goodBand = { label: "Good", floor: 50, description: "test" };
+
 function fakeResult(): ScoreResult {
   return {
     overallScore: 58,
-    band: { label: "Good", floor: 50, description: "test" },
+    band: goodBand,
     gaps: [
-      { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50 },
-      { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25 },
-      { gap: "value", name: "Value gap", score: 50, gapToClose: 50 },
-      { gap: "earnings", name: "Earnings gap", score: 57, gapToClose: 43 },
+      { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1" },
+      { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25, band: goodBand, lowestQuestionId: "A1" },
+      { gap: "value", name: "Value gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "V1" },
+      { gap: "earnings", name: "Earnings gap", score: 57, gapToClose: 43, band: goodBand, lowestQuestionId: "E1" },
     ],
-    widestGap: { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50 },
+    widestGap: { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1" },
   };
 }
 

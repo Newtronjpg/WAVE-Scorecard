@@ -179,3 +179,128 @@ describe("scoreAssessment with a supplied question set", () => {
     ).toThrow(/W1/);
   });
 });
+
+// The results page now names each gap's weakest question, so the
+// per-question normalized scores that scoreAssessment already computes
+// have to survive as far as the caller instead of being averaged and
+// discarded.
+describe("per-gap band", () => {
+  it("labels each gap with the same band bandFor would give its score", () => {
+    const questions = [
+      q("W1", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    // 1 -> 0 (Poor), 2 -> 25 (Fair), 4 -> 75 (Great), 3 -> 50 (Good)
+    const result = scoreAssessment({ W1: 1, A1: 2, V1: 4, E1: 3 }, questions);
+
+    const byGap = Object.fromEntries(result.gaps.map((g) => [g.gap, g]));
+    expect(byGap.wealth.band.label).toBe("Poor");
+    expect(byGap.accounting.band.label).toBe("Fair");
+    expect(byGap.value.band.label).toBe("Great");
+    expect(byGap.earnings.band.label).toBe("Good");
+  });
+
+  it("bands each gap off its own score, not the overall score", () => {
+    // Overall here is (0 + 100 + 100 + 100) / 4 = 75, "Great" -- while
+    // wealth itself is 0, "Poor". A single shared band would show Great
+    // against a zeroed gap.
+    const questions = [
+      q("W1", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    const result = scoreAssessment({ W1: 1, A1: 5, V1: 5, E1: 5 }, questions);
+
+    expect(result.overallScore).toBe(75);
+    expect(result.band.label).toBe("Great");
+    expect(result.gaps.find((g) => g.gap === "wealth")!.band.label).toBe("Poor");
+  });
+});
+
+describe("lowestQuestionId", () => {
+  it("names the weakest question in each gap", () => {
+    const questions = [
+      q("W1", "wealth", 5),
+      q("W2", "wealth", 5),
+      q("W3", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    const result = scoreAssessment(
+      { W1: 5, W2: 2, W3: 4, A1: 3, V1: 3, E1: 3 },
+      questions
+    );
+    expect(result.gaps.find((g) => g.gap === "wealth")!.lowestQuestionId).toBe("W2");
+  });
+
+  it("compares normalized scores, not raw ratings, across mixed choice counts", () => {
+    // Both answered "2", but 2-of-3 normalizes to 50 while 2-of-5
+    // normalizes to 25. Comparing raw ratings would tie and hand it to
+    // W1; only the normalized comparison picks W2.
+    const questions = [
+      q("W1", "wealth", 3),
+      q("W2", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    const result = scoreAssessment(
+      { W1: 2, W2: 2, A1: 3, V1: 3, E1: 3 },
+      questions
+    );
+    expect(result.gaps.find((g) => g.gap === "wealth")!.lowestQuestionId).toBe("W2");
+  });
+
+  it("breaks a tie by position in the question array, not by id", () => {
+    const questions = [
+      q("W1", "wealth", 5),
+      q("W2", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    const result = scoreAssessment(
+      { W1: 1, W2: 1, A1: 3, V1: 3, E1: 3 },
+      questions
+    );
+    expect(result.gaps.find((g) => g.gap === "wealth")!.lowestQuestionId).toBe("W1");
+  });
+
+  it("gives the tie to whichever question the admin ordered first", () => {
+    // Same two tied questions as above with the array order reversed.
+    // An implementation that sorted by id, or leaned on the factory
+    // order, would still answer "W1" here and be wrong -- the boss's
+    // rule is "the first one in question order".
+    const questions = [
+      q("W2", "wealth", 5),
+      q("W1", "wealth", 5),
+      q("A1", "accounting", 5),
+      q("V1", "value", 5),
+      q("E1", "earnings", 5),
+    ];
+    const result = scoreAssessment(
+      { W1: 1, W2: 1, A1: 3, V1: 3, E1: 3 },
+      questions
+    );
+    expect(result.gaps.find((g) => g.gap === "wealth")!.lowestQuestionId).toBe("W2");
+  });
+
+  it("names the only question in a single-question gap", () => {
+    const result = scoreAssessment({ W1: 3, A1: 3, V1: 3, E1: 3 }, minimalSet(5));
+    for (const g of result.gaps) {
+      expect(g.lowestQuestionId).toBe(g.gap === "wealth" ? "W1" : g.lowestQuestionId);
+      expect(g.lowestQuestionId).toBeTruthy();
+    }
+  });
+
+  it("still names a question when every answer in the gap is perfect", () => {
+    // A gap can max out; the results page still has to render a
+    // paragraph, so there is always a "lowest" even at 100.
+    const result = scoreAssessment({ W1: 5, A1: 5, V1: 5, E1: 5 }, minimalSet(5));
+    expect(result.gaps.find((g) => g.gap === "wealth")!.lowestQuestionId).toBe("W1");
+  });
+});

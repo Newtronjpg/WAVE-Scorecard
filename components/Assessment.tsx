@@ -3,16 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { GAPS, type Gap, type Question } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
-import { GapScoreBar } from "./GapScoreBar";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
 import { resolveIndustry } from "@/lib/contact";
+import { buildGapParagraph, resolvePhrases } from "@/lib/resultsCopy";
 
 type ScoreResultShape = {
   overallScore: number;
   band: { label: string; description: string };
-  gaps: { gap: Gap; name: string; score: number; gapToClose: number }[];
+  // band and lowestQuestionId come straight from scoreAssessment via
+  // /api/submit, which spreads the whole result into its JSON response.
+  gaps: {
+    gap: Gap;
+    name: string;
+    score: number;
+    gapToClose: number;
+    band: { label: string };
+    lowestQuestionId: string;
+  }[];
   widestGap: { gap: Gap; name: string; score: number };
   // False when the score was computed but could not be written to the
   // database. Optional so an older cached client bundle still renders.
@@ -20,17 +29,6 @@ type ScoreResultShape = {
 };
 
 type View = "intro" | "section" | "submitting" | "results";
-
-const WIDEST_GAP_ADVICE: Record<Gap, string> = {
-  wealth:
-    "start with a real valuation and a written picture of the number you need to walk away with. Until those two figures are on paper, every other decision here is a guess.",
-  accounting:
-    "get the monthly close under control and start building toward three years of clean, buyer-ready financials. Little else moves quickly if the numbers underneath it aren't trustworthy.",
-  value:
-    "reduce how much the business depends on you personally, whether that's customer concentration, your own day-to-day involvement, or knowledge that only exists in your head. That dependency is typically what costs owners the most at the negotiating table.",
-  earnings:
-    "get a real read on how your margins compare to your industry, and start tracking the handful of numbers that actually explain the gap. It's hard to fix what hasn't been measured.",
-};
 
 // Questions arrive as a prop, resolved server-side, so admin edits show up
 // without a redeploy. `version` is the published version that produced
@@ -88,6 +86,11 @@ export function Assessment({
   ).length;
   const allAnsweredInSection = answeredInSection === currentQuestions.length;
   const totalAnswered = questions.filter((q) => answers[q.id] !== undefined).length;
+
+  // Resolved from the live questions this run was served, matching on
+  // statement text -- the ids in the published set are assigned by
+  // /admin/questions and can't be assumed to match the copy table's.
+  const phrases = useMemo(() => resolvePhrases(questions), [questions]);
 
   function setAnswer(questionId: string, value: number) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -225,19 +228,22 @@ export function Assessment({
           {result.band.description}
         </p>
 
+        {/* Same divide-y rhythm the question sections use, so the four gap
+            readouts read as one list rather than four stacked cards. */}
         <div className="mt-8 divide-y divide-line">
           {result.gaps.map((g) => (
-            <GapScoreBar key={g.gap} name={g.name} score={g.score} />
+            <div key={g.gap} className="py-6 sm:py-7 first:pt-0">
+              <div className="flex items-baseline justify-between gap-4">
+                <h3 className="font-display text-xl text-ink">{g.name}</h3>
+                <span className="text-sm font-medium text-ink whitespace-nowrap">
+                  {g.band.label} ({g.score})
+                </span>
+              </div>
+              <p className="mt-2 text-ink leading-relaxed">
+                {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, phrases)}
+              </p>
+            </div>
           ))}
-        </div>
-
-        <div className="mt-8 border-l-2 border-maroon pl-4">
-          <p className="text-ink leading-relaxed">
-            Your overall readiness score is {result.overallScore} out of 100,
-            &ldquo;{result.band.label.toLowerCase()}.&rdquo; Your widest gap is your{" "}
-            {result.widestGap.name.toLowerCase()} ({result.widestGap.score}/100). If
-            you do one thing this year, {WIDEST_GAP_ADVICE[result.widestGap.gap]}
-          </p>
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">

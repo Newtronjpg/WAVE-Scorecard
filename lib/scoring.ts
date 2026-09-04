@@ -21,6 +21,13 @@ export interface GapResult {
   name: string;
   score: number; // 0-100, rounded
   gapToClose: number; // 100 - score
+  // This gap's own band, not the overall one -- a gap sitting at 0 has to
+  // read "Poor" even when the overall score lands in "Great".
+  band: ReadinessBand;
+  // The weakest question in this gap by NORMALIZED score, so questions
+  // with different choice counts compare fairly. The results page turns
+  // this into the gap's "single biggest opportunity" sentence.
+  lowestQuestionId: string;
 }
 
 export interface ReadinessBand {
@@ -45,30 +52,50 @@ export interface ScoreResult {
 // change, not a hunt through the UI. lib/gauge.ts colors the arc by
 // INDEX into this array, so reordering these entries reorders the
 // colors with them.
+// `description` is the top-of-page paragraph shown under the gauge. It sits
+// on the same screen as the four per-gap paragraphs in lib/resultsCopy.ts,
+// so each one below was checked against that band's four gap paragraphs and
+// reworded where a phrase repeated literally. Those rewordings are noted
+// inline; the gap paragraphs themselves are verbatim and were left alone.
+// Editing either side means re-checking the other.
 export const READINESS_BANDS: ReadinessBand[] = [
   {
     label: "Poor",
     floor: 0,
+    // Verbatim -- "advantage" also appears in the Poor/Value paragraph, but
+    // in a different phrase ("which is the whole advantage"), so there is no
+    // literal repetition to remove.
     description:
-      "There's foundational work to do across most of these areas before a transaction conversation makes sense.",
+      "There is real work ahead, and none of it is unusual or unfixable. Owners who start from here and give themselves a few years routinely end up somewhere very different — the advantage is knowing now rather than at the closing table.",
   },
   {
     label: "Fair",
     floor: 25,
+    // Reworded: the source read "The distance between where you are and
+    // where you want to land is real — and it is the kind of distance a
+    // focused couple of years can close", which restated the Fair/Wealth
+    // paragraph's "closing the distance between that thinking and a plan
+    // you could act on".
     description:
-      "This is where most owners sit, and where starting three to seven years early pays off the most. There is real, fixable work between you and your number.",
+      "This is where most owners sit, and it is where starting early pays off the most. What separates where you are from where you want to land is real — and it is the kind of ground a focused couple of years can cover.",
   },
   {
     label: "Good",
     floor: 50,
+    // Reworded: the source opened "You are closer than most owners", which
+    // repeated the Good/Wealth paragraph's "You are further along than most
+    // owners" (and Good/Value's "more than most owners can say").
     description:
-      "The fundamentals are largely in place. What's left is closing specific, identifiable gaps rather than starting from scratch.",
+      "You are in better shape than you might expect, and the hard part is behind you. A focused year or two on the right things could meaningfully change how this ends.",
   },
   {
     label: "Great",
     floor: 75,
+    // Reworded: the source read "protecting the value you have built",
+    // the duplicate the copy doc flagged against the Great/Wealth
+    // paragraph's "protecting what you have built".
     description:
-      "The business is in strong position for a transaction conversation whenever you're ready to have it.",
+      "You are in strong shape, and it shows across every gap. The work now is defending that position and staying ready for a conversation you are not expecting.",
   },
 ];
 
@@ -154,11 +181,25 @@ export function scoreAssessment(
     const rawAverage =
       normalizedScores.reduce((sum, n) => sum + n, 0) / normalizedScores.length;
     const score = Math.round(rawAverage);
+
+    // Strict `<` is what implements the tie-break: on equal scores the
+    // earlier entry is never displaced, so the winner is the first
+    // question in the supplied array order -- the same order
+    // components/Assessment.tsx renders in, which is the order the admin
+    // arranged in /admin/questions. Sorting by id or by gap would answer
+    // differently and be wrong.
+    let lowestIndex = 0;
+    for (let i = 1; i < normalizedScores.length; i++) {
+      if (normalizedScores[i] < normalizedScores[lowestIndex]) lowestIndex = i;
+    }
+
     return {
       gap: gapMeta.id,
       name: gapMeta.name,
       score,
       gapToClose: 100 - score,
+      band: bandFor(score),
+      lowestQuestionId: gapQuestions[lowestIndex].id,
     };
   });
 
