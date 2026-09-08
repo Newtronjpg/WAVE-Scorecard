@@ -1,12 +1,13 @@
 // One-off: rewrite the entire question set from the internal workbook.
 //
 // Dry run (default -- no writes, prints a field-level diff):
-//   DATABASE_URL='<url>' npx tsx scripts/fix-question-set.ts
+//   DATABASE_URL='<url>' npx tsx scripts/fix-question-set.ts \
+//     --workbook '<path to the internal workbook>.xlsx'
 //
 // Apply (writes the draft row + a new published version):
-//   DATABASE_URL='<url>' npx tsx scripts/fix-question-set.ts --apply
+//   ... same, plus --apply
 //
-// Point at a different workbook with --workbook '<path>'.
+// The workbook path is required; WAVE_WORKBOOK works instead of the flag.
 //
 // Statements and rating descriptions are READ FROM THE WORKBOOK, never
 // transcribed by hand. A3's rubric had already drifted to content
@@ -47,8 +48,11 @@ import {
 import type { Gap } from "../lib/questions";
 import { auditPhraseCoverage } from "../lib/resultsCopy";
 
-const DEFAULT_WORKBOOK =
-  "/Users/noahnewton/Desktop/WAVE_Assessment_Internal_Workbook_v8 (1).xlsx";
+// No default path: the workbook lives outside the repo and its location is
+// personal to whoever is running this. Pass --workbook '<path>' or set
+// WAVE_WORKBOOK, rather than baking one machine's home directory into a
+// committed script.
+const WORKBOOK_FROM_ENV = process.env.WAVE_WORKBOOK;
 const SHEET = "Assessment";
 // 1-indexed (exceljs): C = id, D = statement, G = "what each rating means".
 const COL_ID = 3;
@@ -357,7 +361,15 @@ function argValue(flag: string): string | undefined {
 
 async function main() {
   const apply = process.argv.includes("--apply");
-  const workbookPath = argValue("--workbook") ?? DEFAULT_WORKBOOK;
+  const workbookPath = argValue("--workbook") ?? WORKBOOK_FROM_ENV;
+  if (!workbookPath) {
+    console.error(
+      "REFUSING TO RUN: no workbook given.\n" +
+        "  npx tsx scripts/fix-question-set.ts --workbook '<path to the internal workbook>.xlsx'\n" +
+        "  (or set WAVE_WORKBOOK)"
+    );
+    process.exit(1);
+  }
 
   console.log(`Workbook: ${workbookPath}`);
   const parsed = await loadFromWorkbook(workbookPath);

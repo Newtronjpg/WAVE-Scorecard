@@ -44,6 +44,10 @@ yarn-error.log*
 CLAUDE.md
 AGENTS.md
 docs/superpowers/
+# Was only excluded by its own nested .superpowers/sdd/.gitignore, which
+# covers the files under sdd/ but nothing added beside it. Ignored here so
+# the rule lives with the others it belongs to.
+.superpowers/
 
 # typescript
 *.tsbuildinfo
