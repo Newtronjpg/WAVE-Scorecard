@@ -48,3 +48,6 @@ docs/superpowers/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# One-off backups written by scripts/fix-question-set.ts
+question-set-backup-*.json
