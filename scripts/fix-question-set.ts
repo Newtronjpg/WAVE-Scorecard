@@ -191,6 +191,64 @@ async function loadFromWorkbook(path: string): Promise<StoredQuestion[]> {
   return questions;
 }
 
+// The workbook has no column for the short button labels, so the ones in
+// LABELS above were reconstructed. Production already carries labels a
+// human wrote, and those are better than a reconstruction -- so keep the
+// live label whenever the rating underneath it still MEANS the same thing
+// (its description is unchanged bar typography). Where the description
+// genuinely changed, the old label may no longer describe the rating at
+// all -- A3's "Trusted but not able" against a buyer-diligence rubric --
+// so the reconstruction is used there instead.
+function preserveExistingLabels(
+  parsed: StoredQuestion[],
+  current: StoredQuestion[]
+): { questions: StoredQuestion[]; kept: string[] } {
+  const currentById = new Map(current.map((q) => [q.id, q]));
+  const kept: string[] = [];
+  const restoredPunctuation: string[] = [];
+
+  const questions = parsed.map((question) => {
+    const live = currentById.get(question.id);
+    if (!live) return question;
+
+    const levels = question.levels.map((level, i) => {
+      const liveLevel = live.levels[i];
+      if (!liveLevel) return level;
+      // The workbook drops the closing period on a number of descriptions
+      // that production punctuates correctly. Differing ONLY by trailing
+      // sentence punctuation is not an edit, so keep production's.
+      const bare = (t: string) => normalizeTypography(t).replace(/[.]+$/, "");
+      if (
+        bare(liveLevel.description) === bare(level.description) &&
+        liveLevel.description !== level.description &&
+        /[.]$/.test(liveLevel.description.trim()) &&
+        !/[.]$/.test(level.description.trim())
+      ) {
+        restoredPunctuation.push(`${question.id} level ${i + 1}`);
+        return { ...level, description: liveLevel.description, label: liveLevel.label || level.label };
+      }
+
+      const sameMeaning =
+        normalizeTypography(liveLevel.description) === normalizeTypography(level.description);
+      if (sameMeaning && liveLevel.label.trim() && liveLevel.label !== level.label) {
+        kept.push(`${question.id} level ${i + 1}: kept "${liveLevel.label}" (not "${level.label}")`);
+        return { ...level, label: liveLevel.label };
+      }
+      return level;
+    });
+
+    return { ...question, levels };
+  });
+
+  if (restoredPunctuation.length > 0) {
+    console.log(
+      `\n${restoredPunctuation.length} description(s) kept production's closing period ` +
+        `(workbook omits it): ${restoredPunctuation.join(", ")}`
+    );
+  }
+  return { questions, kept };
+}
+
 type Diff = { id: string; field: string; before: string; after: string; kind: "substantive" | "typography" };
 
 // A curly apostrophe from Word against a straight one typed in the admin
@@ -321,7 +379,17 @@ async function main() {
     }
   }
 
-  const validation = validateQuestionSet(parsed);
+  const preliminary = await db.questionSetVersion.findFirst({ orderBy: { version: "desc" } });
+  const preliminaryValidation = preliminary ? validateQuestionSet(preliminary.questions) : null;
+  const liveForLabels: StoredQuestion[] =
+    preliminaryValidation && preliminaryValidation.ok ? preliminaryValidation.questions : [];
+  const { questions: reconciled, kept } = preserveExistingLabels(parsed, liveForLabels);
+  if (kept.length > 0) {
+    console.log(`\n${kept.length} existing production label(s) preserved over the reconstruction:`);
+    for (const k of kept) console.log(`  ${k}`);
+  }
+
+  const validation = validateQuestionSet(reconciled);
   if (!validation.ok) {
     console.error("REFUSING TO RUN: the new question set failed validation:");
     for (const err of validation.errors) console.error(`  - ${err}`);
