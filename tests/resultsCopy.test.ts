@@ -225,9 +225,47 @@ describe("GAP_BAND_PARAGRAPHS", () => {
   });
 });
 
+// The workbook (Client Summary D10:D13) picks the closing sentence from the
+// LOWEST RAW RATING in the gap, on a separate axis from the band paragraph:
+// 1-2 "the single biggest opportunity", 3 "the area with the most room
+// left", 4 no sentence at all. A gap where every answer is a 4 gets the
+// band paragraph alone -- telling an owner their biggest opportunity is
+// something they already scored top marks on reads as broken.
+describe("buildGapParagraph closing sentence by lowest rating", () => {
+  const phraseV3 = "getting your key processes written down instead of living in people's heads";
+
+  it("uses \"single biggest opportunity\" when the lowest rating is 1", () => {
+    const built = buildGapParagraph("value", "Good", "V3", 1);
+    expect(built).toBe(
+      `${GAP_BAND_PARAGRAPHS.value.Good} The single biggest opportunity here is ${phraseV3}.`
+    );
+  });
+
+  it("uses \"single biggest opportunity\" when the lowest rating is 2", () => {
+    const built = buildGapParagraph("value", "Good", "V3", 2);
+    expect(built).toContain("The single biggest opportunity here is");
+    expect(built).not.toContain("the most room left");
+  });
+
+  it("uses \"the area with the most room left\" when the lowest rating is 3", () => {
+    const built = buildGapParagraph("value", "Good", "V3", 3);
+    expect(built).toBe(
+      `${GAP_BAND_PARAGRAPHS.value.Good} The area with the most room left is ${phraseV3}.`
+    );
+    expect(built).not.toContain("single biggest opportunity");
+  });
+
+  it("adds no closing sentence at all when the lowest rating is 4", () => {
+    const built = buildGapParagraph("value", "Great", "V3", 4);
+    expect(built).toBe(GAP_BAND_PARAGRAPHS.value.Great);
+    expect(built).not.toContain("opportunity");
+    expect(built).not.toContain("room left");
+  });
+});
+
 describe("buildGapParagraph", () => {
   it("joins the band paragraph and the opportunity sentence with one space", () => {
-    const built = buildGapParagraph("value", "Good", PHRASE_TABLE[12].questionId);
+    const built = buildGapParagraph("value", "Good", PHRASE_TABLE[12].questionId, 1);
     expect(built).toBe(
       GAP_BAND_PARAGRAPHS.value.Good +
         " The single biggest opportunity here is getting your key processes written down instead of living in people's heads."
@@ -235,21 +273,21 @@ describe("buildGapParagraph", () => {
   });
 
   it("produces exactly two sentence endings, with no double space or double period", () => {
-    const built = buildGapParagraph("wealth", "Poor", PHRASE_TABLE[0].questionId);
+    const built = buildGapParagraph("wealth", "Poor", PHRASE_TABLE[0].questionId, 1);
     expect(built).not.toContain("  ");
     expect(built).not.toContain("..");
     expect(built.endsWith(".")).toBe(true);
   });
 
   it("uses the phrase belonging to the named lowest question", () => {
-    const built = buildGapParagraph("earnings", "Fair", PHRASE_TABLE[19].questionId);
+    const built = buildGapParagraph("earnings", "Fair", PHRASE_TABLE[19].questionId, 1);
     expect(built).toContain(PHRASE_TABLE[19].phrase);
   });
 
   it("renders a band paragraph for every gap and band combination", () => {
     for (const gap of GAPS) {
       for (const band of READINESS_BANDS) {
-        const built = buildGapParagraph(gap.id, band.label, PHRASE_TABLE[0].questionId);
+        const built = buildGapParagraph(gap.id, band.label, PHRASE_TABLE[0].questionId, 1);
         expect(built).toContain(GAP_BAND_PARAGRAPHS[gap.id][band.label]);
         expect(built).toContain("The single biggest opportunity here is");
       }
@@ -259,21 +297,21 @@ describe("buildGapParagraph", () => {
   it("falls back to the band paragraph alone when the question has no phrase", () => {
     // Better a slightly shorter paragraph than a live page reading
     // "...opportunity here is undefined."
-    const built = buildGapParagraph("wealth", "Great", "NOT_A_REAL_ID");
+    const built = buildGapParagraph("wealth", "Great", "NOT_A_REAL_ID", 1);
     expect(built).toBe(GAP_BAND_PARAGRAPHS.wealth.Great);
     expect(built).not.toContain("undefined");
     expect(built).not.toContain("The single biggest opportunity");
   });
 
   it("falls back to the band paragraph alone for an unknown band label", () => {
-    const built = buildGapParagraph("wealth", "Mediocre", PHRASE_TABLE[0].questionId);
+    const built = buildGapParagraph("wealth", "Mediocre", PHRASE_TABLE[0].questionId, 1);
     expect(built).not.toContain("undefined");
     expect(built.length).toBeGreaterThan(0);
   });
 
   it("accepts a resolved phrase lookup so live ids need not match the table's", () => {
     const phrases = { "some-admin-uuid": "doing the thing" };
-    const built = buildGapParagraph("wealth", "Poor", "some-admin-uuid", phrases);
+    const built = buildGapParagraph("wealth", "Poor", "some-admin-uuid", 1, phrases);
     expect(built).toContain("The single biggest opportunity here is doing the thing.");
   });
 });
@@ -294,7 +332,7 @@ describe("resolvePhrases", () => {
     // off the id would attach a phrase nobody verified against this
     // question's actual text.
     const questions = [
-      q("V5", "value", "How much of your day-to-day data and reporting is automated versus manually updated across different systems?"),
+      q("V5", "value", "How much of your reporting happens in a single system of record?"),
     ];
     expect(resolvePhrases(questions)).toEqual({});
   });

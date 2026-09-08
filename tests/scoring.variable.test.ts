@@ -297,6 +297,29 @@ describe("lowestQuestionId", () => {
     }
   });
 
+  it("reports the raw rating of the lowest question, not its normalized score", () => {
+    // The results page picks which closing sentence to use from the RAW
+    // rating (1-2 vs 3 vs 4), matching the workbook's
+    // MIN(Assessment!$F$15:$F$18) -- so the raw value has to survive
+    // alongside the normalized one.
+    const questions = [
+      q("W1", "wealth", 4),
+      q("W2", "wealth", 4),
+      q("A1", "accounting", 4),
+      q("V1", "value", 4),
+      q("E1", "earnings", 4),
+    ];
+    const result = scoreAssessment({ W1: 4, W2: 3, A1: 4, V1: 4, E1: 4 }, questions);
+    const wealth = result.gaps.find((g) => g.gap === "wealth")!;
+    expect(wealth.lowestQuestionId).toBe("W2");
+    expect(wealth.lowestRating).toBe(3);
+  });
+
+  it("reports a lowest rating of 4 when every answer in the gap is the top choice", () => {
+    const result = scoreAssessment({ W1: 4, A1: 4, V1: 4, E1: 4 }, minimalSet(4));
+    for (const g of result.gaps) expect(g.lowestRating).toBe(4);
+  });
+
   it("still names a question when every answer in the gap is perfect", () => {
     // A gap can max out; the results page still has to render a
     // paragraph, so there is always a "lowest" even at 100.

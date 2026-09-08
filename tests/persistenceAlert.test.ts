@@ -24,12 +24,12 @@ function fakeResult(): ScoreResult {
     overallScore: 58,
     band: goodBand,
     gaps: [
-      { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1" },
-      { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25, band: goodBand, lowestQuestionId: "A1" },
-      { gap: "value", name: "Value gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "V1" },
-      { gap: "earnings", name: "Earnings gap", score: 57, gapToClose: 43, band: goodBand, lowestQuestionId: "E1" },
+      { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1", lowestRating: 2 },
+      { gap: "accounting", name: "Accounting gap", score: 75, gapToClose: 25, band: goodBand, lowestQuestionId: "A1", lowestRating: 3 },
+      { gap: "value", name: "Value gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "V1", lowestRating: 2 },
+      { gap: "earnings", name: "Earnings gap", score: 57, gapToClose: 43, band: goodBand, lowestQuestionId: "E1", lowestRating: 3 },
     ],
-    widestGap: { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1" },
+    widestGap: { gap: "wealth", name: "Wealth gap", score: 50, gapToClose: 50, band: goodBand, lowestQuestionId: "W1", lowestRating: 2 },
   };
 }
 

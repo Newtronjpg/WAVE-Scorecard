@@ -21,6 +21,7 @@ type ScoreResultShape = {
     gapToClose: number;
     band: { label: string };
     lowestQuestionId: string;
+    lowestRating: number;
   }[];
   widestGap: { gap: Gap; name: string; score: number };
   // False when the score was computed but could not be written to the
@@ -240,7 +241,7 @@ export function Assessment({
                 </span>
               </div>
               <p className="mt-2 text-ink leading-relaxed">
-                {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, phrases)}
+                {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, g.lowestRating, phrases)}
               </p>
             </div>
           ))}

@@ -120,8 +120,11 @@ export const PHRASE_TABLE: PhraseEntry[] = [
   },
   {
     questionId: "V5",
+    // Reconciled to the internal workbook's wording (the question source of
+    // truth), which is longer than the copy document's shorthand. This field
+    // is only a join key -- the phrase itself is unchanged.
     statement:
-      "How much of your day-to-day data and reporting is automated versus manual?",
+      "How much of your day-to-day data and reporting is automated versus manually updated across different systems?",
     phrase:
       "connecting your systems so your reporting does not depend on manual work",
   },
@@ -275,11 +278,11 @@ export const GAP_BAND_PARAGRAPHS: Record<Gap, Record<string, string>> = {
       "This is a business that does not depend on any one person, customer, or handshake. That is worth real money — make sure the story is documented so a buyer sees it too.",
   },
   earnings: {
-    // Transcribed exactly as written. NOTE: the source sentence "Putting
-    // numbers underneath what instinct is where the next few points of
-    // margin come from" appears to be missing words. Flagged to the copy
-    // owner; not silently reworded here, since this file is verbatim.
-    Poor: "You have run this business on instinct and it has worked. Putting numbers underneath what instinct is where the next few points of margin come from, and it is usually the fastest improvement in this whole assessment.",
+    // Verbatim from the workbook's Client Copy Bank (row 32, Earnings
+    // column). An earlier transcription of this paragraph read "underneath
+    // what instinct is where", which is ungrammatical -- that was a
+    // transcription error, not a defect in the source.
+    Poor: "You have run this business on instinct and it has worked. Putting numbers underneath that instinct is where the next few points of margin come from, and it is usually the fastest improvement in this whole assessment.",
     Fair: "You have a good feel for what is working in this business, and that feel is usually right. Putting real data behind it is typically the fastest money in this entire assessment.",
     Good: "You track the right things, and that discipline is already paying off. The opportunity now is turning good reporting into steady margin improvement.",
     Great:
@@ -287,24 +290,44 @@ export const GAP_BAND_PARAGRAPHS: Record<Gap, Record<string, string>> = {
   },
 };
 
-// The full paragraph rendered for one gap: that gap's band paragraph
-// followed by the opportunity sentence naming its weakest question.
+// The full paragraph rendered for one gap: that gap's band paragraph,
+// then a closing sentence naming its weakest question.
 //
-// Either half is dropped rather than rendered broken -- a missing phrase
-// yields the paragraph alone, never "...opportunity here is undefined."
+// Which closing sentence depends on the weakest question's RAW rating,
+// not on the gap's band -- they are separate axes, and the workbook
+// (Client Summary D10:D13) switches on the raw one:
+//
+//   rating 1-2  ->  "The single biggest opportunity here is ..."
+//   rating 3    ->  "The area with the most room left is ..."
+//   rating 4    ->  no closing sentence at all
+//
+// The rating-4 case matters: a gap where every answer is the top choice
+// has no opportunity to name, and claiming one reads as broken to an
+// owner who just scored full marks.
+//
+// A missing phrase also drops the sentence rather than rendering
+// "...opportunity here is undefined."
 export function buildGapParagraph(
   gap: Gap,
   band: string,
   lowestQuestionId: string,
+  lowestRating: number,
   phrases: Record<string, string> = QUESTION_PHRASES
 ): string {
   const paragraph = GAP_BAND_PARAGRAPHS[gap]?.[band] ?? "";
   const phrase = phrases[lowestQuestionId];
-  const opportunity = phrase
-    ? `The single biggest opportunity here is ${phrase}.`
-    : "";
 
-  return [paragraph, opportunity].filter(Boolean).join(" ");
+  let closing = "";
+  if (phrase) {
+    if (lowestRating <= 2) {
+      closing = `The single biggest opportunity here is ${phrase}.`;
+    } else if (lowestRating === 3) {
+      closing = `The area with the most room left is ${phrase}.`;
+    }
+    // rating 4 (or higher, on a longer scale): deliberately no sentence.
+  }
+
+  return [paragraph, closing].filter(Boolean).join(" ");
 }
 
 // Re-exported for callers that want to iterate gaps in display order

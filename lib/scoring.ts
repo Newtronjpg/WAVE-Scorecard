@@ -26,8 +26,13 @@ export interface GapResult {
   band: ReadinessBand;
   // The weakest question in this gap by NORMALIZED score, so questions
   // with different choice counts compare fairly. The results page turns
-  // this into the gap's "single biggest opportunity" sentence.
+  // this into the gap's closing sentence.
   lowestQuestionId: string;
+  // That question's RAW chosen rating. The workbook picks which closing
+  // sentence to use from this (1-2, 3, or 4 -- see buildGapParagraph),
+  // which is a different axis from the gap's band, so the raw value has
+  // to travel alongside the normalized one.
+  lowestRating: number;
 }
 
 export interface ReadinessBand {
@@ -200,6 +205,7 @@ export function scoreAssessment(
       gapToClose: 100 - score,
       band: bandFor(score),
       lowestQuestionId: gapQuestions[lowestIndex].id,
+      lowestRating: answers[gapQuestions[lowestIndex].id],
     };
   });
 
