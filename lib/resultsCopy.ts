@@ -332,4 +332,61 @@ export function buildGapParagraph(
 
 // Re-exported for callers that want to iterate gaps in display order
 // without importing lib/questions directly.
+
+// The "where we can help" line shown under each gap paragraph, from rows 44-47
+// of the same Client Copy Bank tab. Keyed exactly like GAP_BAND_PARAGRAPHS:
+// gap, then score band.
+//
+// Ben's email pointed at this block for the advisor-ranking page, "next to each
+// area". It does not fit there -- it is keyed by the four WAVE gaps, not by the
+// four advisor areas, so Legal and Insurance would have no copy and the value
+// and earnings columns would have nowhere to go. It is written as results-page
+// copy and reads as results-page copy, so that is where it renders.
+//
+// Good and Great are identical in the workbook for every gap. Transcribed as
+// written rather than collapsed, so that if Ben splits them later the shape
+// here does not have to change.
+export const GAP_BAND_HELP: Record<Gap, Record<string, string>> = {
+  wealth: {
+    Poor:
+      "Quick \"ballpark\" valuation range based on key assumptions and coordination with your wealth advisor to align with long-term planning.",
+    Fair:
+      "Better awareness of two things (1) how much earnings are you relying on the business and (2) value drivers that can protect, enhance, or detract value. For (1) - we often help coordinate with your wealth advisor to align post-transition expectations. For (2) - we help establish meaningful value-driver targets and a reasonable and digestible plan to manage.",
+    Good:
+      "Ensuring the plan and value is protected or on the right track. Update at least annually and maintain communications with outside advisors and stakeholders.",
+    Great:
+      "Ensuring the plan and value is protected or on the right track. Update at least annually and maintain communications with outside advisors and stakeholders.",
+  },
+  accounting: {
+    Poor:
+      "Identifying where your biggest weakness is and taking the first step. This can be adding or subtracting the right or wrong person, or getting the right technology stack in place. We can help with an accounting assessment and recommendations for next steps.",
+    Fair:
+      "You've likely already identified what needs to happen, but have not found the time to take action. We can help drive or manage such actions.",
+    Good:
+      "A proactive quality of earnings analysis can be performed while you are not \"under the gun\" and maintained in an efficient manner (schedules and supporting files). This overall initial process is often insightful for owners, and once completed it can be maintained in an efficient manner and ready when needed. Further, ensuring that a \"dress rehearsal\" of a transaction process can be done with minimal distraction to the day-to-day operations.",
+    Great:
+      "A proactive quality of earnings analysis can be performed while you are not \"under the gun\" and maintained in an efficient manner (schedules and supporting files). This overall initial process is often insightful for owners, and once completed it can be maintained in an efficient manner and ready when needed. Further, ensuring that a \"dress rehearsal\" of a transaction process can be done with minimal distraction to the day-to-day operations.",
+  },
+  value: {
+    Poor:
+      "Quick \"ballpark\" valuation range or limited scope engagement and include observations on select value driver areas to address (customers, management, processes, vendors, profitability, etc.).Help you assess the impact of each gap and your ability to control - then work together with a plan to address in a meaningful way.",
+    Fair:
+      "Quick \"ballpark\" valuation range or limited scope engagement and include observations on select value driver areas to address (customers, management, processes, vendors, profitability, etc.).Help you assess the impact of each gap and your ability to control - then work together with a plan to address in a meaningful way.",
+    Good:
+      "Updating and maintaining a pulse on your business value and protecting any key value drivers. Further, a more comprehensive quality of earnings analysis or schedules to highlight less financial statement areas - such as customer concentrations, segment performance, personnel depth and composition, net working capital, etc.). Lastly, we can help you organize the story and documents supporting value and earnings in the form of a \"mock data room\" to be ready when needed to prepare for an outside buyer, lender, or investor.",
+    Great:
+      "Updating and maintaining a pulse on your business value and protecting any key value drivers. Further, a more comprehensive quality of earnings analysis or schedules to highlight less financial statement areas - such as customer concentrations, segment performance, personnel depth and composition, net working capital, etc.). Lastly, we can help you organize the story and documents supporting value and earnings in the form of a \"mock data room\" to be ready when needed to prepare for an outside buyer, lender, or investor.",
+  },
+  earnings: {
+    Poor:
+      "A simple benchmark analysis to understand trends and comparison to industry averages. Understand where you are in line and out of line with industry peers.",
+    Fair:
+      "An expanded benchmark analysis that helps you identify where you are out of line with the industry and why. Further, we can extend upon this and help you understand what actions are (1) causing misalignment with peers and (2) what actions can be taken to improve.",
+    Good:
+      "Help you demonstrate how actions are translating to improve financial performance and document. Further, connecting this analysis to a recurring valuation and/or quality of earnings report can help you stay prepared to communicate this story quickly when needed (whether for banking, growth capital, or an ownership transaction).",
+    Great:
+      "Help you demonstrate how actions are translating to improve financial performance and document. Further, connecting this analysis to a recurring valuation and/or quality of earnings report can help you stay prepared to communicate this story quickly when needed (whether for banking, growth capital, or an ownership transaction).",
+  },
+};
+
 export const GAP_ORDER: Gap[] = GAPS.map((gap) => gap.id);

@@ -1,0 +1,622 @@
+[
+  {
+    "id": "W1",
+    "gap": "wealth",
+    "statement": "I know what my business is worth today, based on a credible recent valuation, not a guess or a rule of thumb.",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No real idea",
+        "description": "No real idea, I'd be guessing.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Rough guess or rule of thumb",
+        "description": "A rough gut number or an old rule of thumb.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Recent informal estimate",
+        "description": "A recent informal estimate or calculation.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Credible formal valuation",
+        "description": "A credible, current formal valuation.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "W2",
+    "gap": "wealth",
+    "statement": "Have you determined the specific after-tax amount you need from the sale of your business to fund your retirement,  and how confident are you in that figure?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No number",
+        "description": "No number. Haven't quantified what the sale needs to net you.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Gut-feel target only",
+        "description": "Gut-feel target only. Not calculated, not tied to retirement spending, ignores taxes.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Calculated but not updated",
+        "description": "Calculated after-tax target based on a real retirement plan, but not recently updated or stress-tested.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Validated and stress-tested",
+        "description": "Validated, current after-tax number built with an advisor, tied to a documented plan and stress-tested against downside scenarios.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "W3",
+    "gap": "wealth",
+    "statement": "How much runway do you have before you\u2019d like to step back or transition out of the business?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Less than 3 years",
+        "description": "Less than 3 years, or I don't know yet.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "3 to 5 years",
+        "description": "3\u20135 years.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "5 to 7 years",
+        "description": "5\u20137 years.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "More than 7 years",
+        "description": "More than 7 years.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "W4",
+    "gap": "wealth",
+    "statement": "I have a plan for how and when I'll hand off or sell the business.",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No plan",
+        "description": "I don't have a plan.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Written down",
+        "description": "I have one and it's written down.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Shared with wealth advisor",
+        "description": "I have one, it's written down, and it's shared with my wealth advisor.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Shared with all advisors",
+        "description": "I have one, it's written down, and it's shared with all my advisors and they're meeting regularly to talk about it.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A1",
+    "gap": "accounting",
+    "statement": "Our accounting team produces accurate monthly financials on a timely close.",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Late, unreliable close",
+        "description": "One bookkeeper (or an outside service) handles everything; books close late, if monthly at all, and I'm not confident they're accurate.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Slow or inconsistent",
+        "description": "In-house bookkeeper with outside CPA support; statements come eventually, but slow or inconsistent.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Trusted, regular close",
+        "description": "An in-house controller closes the books monthly on a regular schedule, and I trust the numbers.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Fast, diligence-ready close",
+        "description": "In-house finance leadership (controller and CFO) with a team; accurate monthly statements on a fast, predictable close.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A2",
+    "gap": "accounting",
+    "statement": "How would you rate your company\u2019s budgeting and forecasting process, including how regularly you compare actual results to budget and update forecasts as business conditions change?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No reliable budget",
+        "description": "No reliable budget or forecast; limited tracking against actuals.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Annual, occasional review",
+        "description": "Annual budget with occasional actual vs. budget review.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Monthly variance review",
+        "description": "Monthly variance reviews and forecasts updated periodically.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Rolling forecasts",
+        "description": "Rolling forecasts updated regularly and used to guide decisions.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A3",
+    "gap": "accounting",
+    "statement": "If a buyer showed up tomorrow, do you think you could deliver meaningful information to them in a timely manner while maintaining the appropriate level of confidentiality?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Would need a lot of help",
+        "description": "No, we'd need a lot of outside help just to pull the information together.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Would be a scramble",
+        "description": "Eventually, but it would be a scramble, and keeping it quiet would be hard.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Most within a few weeks",
+        "description": "We could produce most of what's asked within a few weeks, with some help.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Three years within two weeks",
+        "description": "We could hand over three clean years within two weeks, quietly, without disrupting the business.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A4",
+    "gap": "accounting",
+    "statement": "I have someone financially capable I trust to work on a confidential deal without alarming the rest of the staff.",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No one I'd trust",
+        "description": "No one, inside or outside that I'd trust with confidential deal work.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Not sure they could handle it",
+        "description": "Maybe someone internally, but I'm not sure they could handle the workload.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Capable trusted person",
+        "description": "I have a capable, trusted person in-house or an outside advisor.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Briefed and ready",
+        "description": "I have a trusted, deal-capable person already briefed and ready to go.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A5",
+    "gap": "accounting",
+    "statement": "What's the highest level of externally reported financial statements?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Internal only",
+        "description": "None. Internal only.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "CPA compiled",
+        "description": "CPA compiled financial statements.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "CPA reviewed",
+        "description": "CPA reviewed financial statements.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "CPA audited",
+        "description": "CPA audited financial statements.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "A6",
+    "gap": "accounting",
+    "statement": "Does my team have the bandwidth to take on deal work on top of their regular job?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No",
+        "description": "No, they're already stretched.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Some",
+        "description": "They could absorb a little extra, but something else would slip.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Most",
+        "description": "They could handle it for a few months, with some outside help.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Yes",
+        "description": "Yes, my team could take this on and keep the day-to-day running.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "V1",
+    "gap": "value",
+    "statement": "How concentrated is your business among key customers and vendors?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "One customer over 50%",
+        "description": "One customer or critical vendor is more than 50% of the business.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Top customers 30 to 50%",
+        "description": "Our top customers or vendors are 30\u201350% of the business.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Top customers 10 to 30%",
+        "description": "Our top customers or vendors are 10\u201330% of the business.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "No customer over 10%",
+        "description": "No single customer or critical vendor is more than 10% of the business.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "V2",
+    "gap": "value",
+    "statement": "How dependent is the business on you or other key individuals to operate successfully?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Relies heavily on me",
+        "description": "The business relies heavily on me, if I were unexpectedly out for an extended/indefinite period, it would have a hard time continuing to operate successfully.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Some dependence remains",
+        "description": "The business could keep running without me for a period of time, but certain important decisions, relationships, or responsibilities still depend on me.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Strong team, still relied on",
+        "description": "I have a strong management team that can run the business, but I\u2019m still relied on for certain key decisions or relationships.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Runs smoothly without me",
+        "description": "I could step away from the business for a month and it would continue running smoothly without me.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "V3",
+    "gap": "value",
+    "statement": "How well are your internal processes documented?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Little written down",
+        "description": "We have very little written down, most processes live in people\u2019s heads",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Documented, not consistent",
+        "description": "We have some processes documented, but they aren\u2019t consistently followed or tracked.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Documented, not measured",
+        "description": "Most of our key processes are documented and generally followed, but we don\u2019t consistently measure performance against them.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Documented and measured",
+        "description": "Our key processes are clearly documented, consistently followed, and measured using defined KPIs.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "V4",
+    "gap": "value",
+    "statement": "What percent of your revenue is recurring?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Almost none",
+        "description": "Almost none, we start from zero every year.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Less than 25%",
+        "description": "Less than 25% of our revenue repeats.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Roughly 25 to 50%",
+        "description": "Roughly 25\u201350% of our revenue repeats.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "More than half",
+        "description": "More than half our revenue repeats or is under contract.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "V5",
+    "gap": "value",
+    "statement": "How much of your day-to-day data and reporting is automated versus manually updated across different systems?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Mostly manual",
+        "description": "Most updates are manual, and our systems don\u2019t really talk to each other.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Some automation",
+        "description": "Some things are automated, but we still rely heavily on manual updates and moving information between systems.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Mostly connected",
+        "description": "Most of our key systems are connected and automated, with some manual work still required.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Well integrated",
+        "description": "Our systems are well integrated, and information flows automatically with very little manual effort.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "E1",
+    "gap": "earnings",
+    "statement": "I know which jobs, products, or customers make me the most money, and which ones lose money.",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No clear view",
+        "description": "We don\u2019t have a clear view of which jobs, products, or customers make or lose money.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "General sense only",
+        "description": "We have a general sense of what\u2019s profitable, but it\u2019s not consistently backed by data.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Track profitability",
+        "description": "We track profitability and can identify our strongest and weakest jobs, products, or customers.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Detailed and actively used",
+        "description": "We have detailed profitability data by job, product, or customer and actively use it to make business decisions.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "E2",
+    "gap": "earnings",
+    "statement": "How would you rate your ability to understand your cash flow?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Limited visibility",
+        "description": "We have limited visibility into cash flow and are often surprised by cash needs.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Understand current position",
+        "description": "We understand our current cash position, but future cash needs can still catch us off guard.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Regularly forecast",
+        "description": "We regularly forecast cash flow and generally understand when and why cash needs will arise.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Reliable and proactive",
+        "description": "We have a reliable cash flow forecast, understand the key drivers behind it, and proactively plan for future cash needs.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "E3",
+    "gap": "earnings",
+    "statement": "How well do you track and benchmark your key financial and operating KPIs, including margins, against targets and industry standards?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Don't track consistently",
+        "description": "We don\u2019t consistently track key KPIs or know how our margins compare to benchmarks.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Limited benchmarking",
+        "description": "We track some key numbers, but benchmarking is limited and we don\u2019t always know what is driving changes in performance.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Regular tracking",
+        "description": "We regularly track KPIs and margins against targets and benchmarks, and usually understand the reasons behind variances.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Actively benchmark and use it",
+        "description": "We actively benchmark our KPIs and margins, understand exactly what drives performance, and use that data to make operating decisions.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "E4",
+    "gap": "earnings",
+    "statement": "How effectively do you monitor and control costs across the business?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "No cost-control process",
+        "description": "No real cost-control process.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Reactive only",
+        "description": "We keep an eye on costs, but mostly react when something looks too high.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Regularly track costs",
+        "description": "We regularly track costs against budgets or expectations and address issues when they arise.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Disciplined process",
+        "description": "We have a disciplined cost-control process that identifies variances early and drives corrective action.",
+        "tier": "Excellent"
+      }
+    ]
+  },
+  {
+    "id": "E5",
+    "gap": "earnings",
+    "statement": "How clearly are your personal and business finances separated?",
+    "levels": [
+      {
+        "value": 1,
+        "label": "Frequently mixed",
+        "description": "Personal and business finances are frequently mixed together.",
+        "tier": "Poor"
+      },
+      {
+        "value": 2,
+        "label": "Mostly separate",
+        "description": "They are mostly separate, but there is still some overlap.",
+        "tier": "Fair"
+      },
+      {
+        "value": 3,
+        "label": "Clearly separated",
+        "description": "They are clearly separated, with only occasional exceptions.",
+        "tier": "Good"
+      },
+      {
+        "value": 4,
+        "label": "Fully separated",
+        "description": "They are fully separated, with clear accounts, records, and processes in place.",
+        "tier": "Excellent"
+      }
+    ]
+  }
+]

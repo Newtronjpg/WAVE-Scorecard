@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  GAP_BAND_HELP,
   PHRASE_TABLE,
   QUESTION_PHRASES,
   GAP_BAND_PARAGRAPHS,
@@ -355,5 +356,47 @@ describe("resolvePhrases", () => {
   it("resolves the whole table when every statement matches", () => {
     const questions = PHRASE_TABLE.map((e, i) => q(`live-${i}`, "wealth", e.statement));
     expect(Object.keys(resolvePhrases(questions))).toHaveLength(20);
+  });
+});
+
+describe("GAP_BAND_HELP", () => {
+  it("has a line for every gap at every band", () => {
+    for (const gap of GAPS) {
+      for (const band of READINESS_BANDS) {
+        const help = GAP_BAND_HELP[gap.id]?.[band.label];
+        expect(help, `${gap.id}/${band.label}`).toBeTruthy();
+        expect(help.trim(), `${gap.id}/${band.label}`).toBe(help);
+      }
+    }
+  });
+
+  it("ends every line on a sentence-ending mark", () => {
+    for (const gap of GAPS) {
+      for (const band of READINESS_BANDS) {
+        expect(GAP_BAND_HELP[gap.id][band.label], `${gap.id}/${band.label}`).toMatch(
+          /[.?!]$/
+        );
+      }
+    }
+  });
+
+  // These describe what F&W would do, so they must not be the same sentence as
+  // the diagnosis directly above them on the page.
+  it("never repeats the gap paragraph it sits under", () => {
+    for (const gap of GAPS) {
+      for (const band of READINESS_BANDS) {
+        expect(GAP_BAND_HELP[gap.id][band.label]).not.toBe(
+          GAP_BAND_PARAGRAPHS[gap.id][band.label]
+        );
+      }
+    }
+  });
+
+  it("carries no spelling fixes the transcription script should have caught", () => {
+    for (const gap of GAPS) {
+      for (const band of READINESS_BANDS) {
+        expect(GAP_BAND_HELP[gap.id][band.label]).not.toMatch(/buisness|efficent/);
+      }
+    }
   });
 });

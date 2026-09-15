@@ -8,7 +8,12 @@ import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
 import { bandColorFor } from "@/lib/gauge";
 import { resolveIndustry } from "@/lib/contact";
-import { buildGapParagraph, resolvePhrases } from "@/lib/resultsCopy";
+import {
+  GAP_BAND_HELP,
+  GAP_ORDER,
+  buildGapParagraph,
+  resolvePhrases,
+} from "@/lib/resultsCopy";
 
 type ScoreResultShape = {
   overallScore: number;
@@ -255,11 +260,72 @@ export function Assessment({
               <p className="mt-2 text-ink leading-relaxed">
                 {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, g.lowestRating, phrases)}
               </p>
+              {/* Ben's "where we can help" copy for this gap at this band. A
+                  tinted block rather than another paragraph, so the shift from
+                  "here is where you stand" to "here is what we would do" is
+                  visible without a heading shouting it. */}
+              <div className="mt-4 rounded-md bg-[var(--color-tint)] px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  Where we can help
+                </p>
+                <p className="mt-1.5 text-sm text-ink leading-relaxed">
+                  {GAP_BAND_HELP[g.gap][g.band.label]}
+                </p>
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-3">
+        {/* Second page of the printout: every question, the answer they chose,
+            and anything they typed. Hidden on screen -- the results page is a
+            summary and stays one. Ben asked for it so the printed copy is a
+            complete record of what the owner actually said, which is what a
+            conversation two weeks later needs. */}
+        <section
+          className="hidden print:block"
+          style={{ breakBefore: "page" }}
+          aria-hidden="true"
+        >
+          <h2 className="font-display text-2xl text-ink">Your answers</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Every question, as you answered it.
+          </p>
+          <div className="mt-6 divide-y divide-line">
+            {GAP_ORDER.map((gapId) => {
+              const gapQuestions = questions.filter((q) => q.gap === gapId);
+              if (gapQuestions.length === 0) return null;
+              const meta = GAPS.find((g) => g.id === gapId);
+              return (
+                <div key={gapId} className="py-4 first:pt-0">
+                  <h3 className="font-display text-lg text-ink">{meta?.name ?? gapId}</h3>
+                  <dl className="mt-2 space-y-3">
+                    {gapQuestions.map((q) => {
+                      const chosen = q.levels.find((l) => l.value === answers[q.id]);
+                      const note = comments[q.id]?.trim();
+                      return (
+                        <div key={q.id} style={{ breakInside: "avoid" }}>
+                          <dt className="text-sm text-ink">{q.statement}</dt>
+                          <dd className="mt-0.5 text-sm text-ink-muted">
+                            {chosen
+                              ? `${chosen.value}. ${chosen.label} — ${chosen.description}`
+                              : "Not answered"}
+                          </dd>
+                          {note && (
+                            <dd className="mt-0.5 text-sm text-ink italic">
+                              Their note: {note}
+                            </dd>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <div className="mt-10 flex flex-col sm:flex-row gap-3 print:hidden">
           <button
             type="button"
             onClick={handleStartOver}
