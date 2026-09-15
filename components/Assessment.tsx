@@ -6,6 +6,7 @@ import { RatingSelector } from "./RatingSelector";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
+import { bandColorFor } from "@/lib/gauge";
 import { resolveIndustry } from "@/lib/contact";
 import { buildGapParagraph, resolvePhrases } from "@/lib/resultsCopy";
 
@@ -194,7 +195,7 @@ export function Assessment({
           Your results
         </p>
         <h1 className="font-display text-3xl sm:text-4xl text-ink mt-2">
-          Transaction readiness
+          Transition readiness
         </h1>
 
         {result.saved === false && (
@@ -215,12 +216,16 @@ export function Assessment({
 
         <div className="mt-6 flex flex-col items-center">
           <ScoreGauge score={result.overallScore} />
+          {/* The number is deliberately absent: Ben's call is that "47/100"
+              reads as a grade and puts owners on the defensive, while the
+              needle plus the word carries the same information without the
+              scolding. The score still drives the needle and still travels to
+              the admin export -- it is only hidden from the owner. */}
           <div className="mt-2 rounded-2xl bg-[var(--color-tint)] px-5 py-2 text-center">
-            <span className="block font-display text-2xl text-ink leading-none">
-              {result.overallScore}
-              <span className="text-sm text-ink-muted">/100</span>
-            </span>
-            <span className="mt-1 block text-xs font-medium tracking-wide text-ink">
+            <span
+              className="block font-display text-2xl leading-none"
+              style={{ color: bandColorFor(result.overallScore) }}
+            >
               {result.band.label}
             </span>
           </div>
@@ -236,8 +241,15 @@ export function Assessment({
             <div key={g.gap} className="py-6 sm:py-7 first:pt-0">
               <div className="flex items-baseline justify-between gap-4">
                 <h3 className="font-display text-xl text-ink">{g.name}</h3>
-                <span className="text-sm font-medium text-ink whitespace-nowrap">
-                  {g.band.label} ({g.score})
+                {/* Same red-to-green ramp as the gauge arc, so a gap reading
+                    "Fair" is the same orange the needle would sit in. Colour is
+                    not the only carrier -- the word is always present -- so this
+                    still reads for anyone who cannot distinguish them. */}
+                <span
+                  className="text-sm font-semibold whitespace-nowrap"
+                  style={{ color: bandColorFor(g.score) }}
+                >
+                  {g.band.label}
                 </span>
               </div>
               <p className="mt-2 text-ink leading-relaxed">
@@ -267,7 +279,38 @@ export function Assessment({
     );
   }
 
-  // Section / submit
+  // Submitting
+  //
+  // Previously this fell through to the section render with only the button
+  // label changed, so the whole page sat still while the request was in
+  // flight -- Ben's note was that it "appears to freeze before jumping to the
+  // results". Scoring is fast, but a cold serverless function plus a database
+  // write is long enough for an owner to think the button did nothing and
+  // click it again. A dedicated view makes the wait legible.
+  if (view === "submitting") {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-24 sm:py-32">
+        <div
+          className="flex flex-col items-center text-center"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            aria-hidden="true"
+            className="h-9 w-9 rounded-full border-2 border-line border-t-maroon motion-safe:animate-spin"
+          />
+          <p className="mt-6 font-display text-2xl text-ink">
+            Scoring your assessment
+          </p>
+          <p className="mt-2 text-sm text-ink-muted leading-relaxed">
+            This takes a few seconds. Please don&rsquo;t close this page.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Section
   return (
     <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
       <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
@@ -325,15 +368,13 @@ export function Assessment({
         <p className="text-sm text-ink-muted">{answeredInSection} of {currentQuestions.length} answered</p>
         <button
           type="button"
-          disabled={!allAnsweredInSection || view === "submitting"}
+          // The submitting view has already taken over by the time a second
+          // click could land, so the guard here is only about completeness.
+          disabled={!allAnsweredInSection}
           onClick={handleNext}
           className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          {view === "submitting"
-            ? "Submitting\u2026"
-            : sectionIndex === GAPS.length - 1
-            ? "See my results"
-            : "Next section"}
+          {sectionIndex === GAPS.length - 1 ? "See my results" : "Next section"}
         </button>
       </div>
     </div>
