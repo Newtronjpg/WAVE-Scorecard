@@ -258,35 +258,35 @@ export function auditPhraseCoverage(questions: Question[]): PhraseCoverageAudit 
 export const GAP_BAND_PARAGRAPHS: Record<Gap, Record<string, string>> = {
   wealth: {
     Poor: "You have built something worth planning around — the next step is putting numbers to it: what the business is worth today, and what it needs to be worth for you. This is where almost every owner starts, and it is one of the quickest gaps to close once you begin.",
-    Fair: "You have already started thinking about your number, which puts you ahead of a lot of owners. The work now is closing the distance between that thinking and a plan you could act on.",
-    Good: "You are further along than most owners. The pieces are there — what is missing is pulling them together into one coordinated plan.",
+    Fair: "You have already started thinking about your number, which puts you ahead of many owners. The work now is closing the distance between that thinking and a reasonable range that you can build a plan and act upon.",
+    Good: "You are further along than most owners. The pieces are there — what is likely missing is pulling them together into one coordinated plan between you and any stakeholders and advisors.",
     Great:
       "You know your number and you have a plan for getting there — that is rare. From here the job is protecting what you have built and keeping the plan current.",
   },
   accounting: {
-    Poor: "Your finance function is doing what you built it to do — running the business day to day. A transaction asks it for something different, and you have time on your side to get it there, which is exactly why now is a good moment to start.",
-    Fair: "Your books do what the business needs day to day, and that foundation is worth something. A buyer or lender would ask for more than the current setup can produce quickly — that is a build, not a rebuild.",
-    Good: "Your finance function is in good shape. What is left is refinement — speed, consistency, and having the right person available when something needs quiet support.",
+    Poor: "Many business owners neglect timely accounting - as they have been running the business this way and know how to navigate \"from the hip.\" While this is common, it is not something that can be easily transferable and doesn't allow for adequate planning. Getting your books in order is the first meaningful step towards being ready to transition.",
+    Fair: "Your books do what the business needs day to day, and that foundation is worth something. An interested party (buyer, investor, or lender) will want to dig deeper beyond your annual or even monthly financials. These requests can be daunting if not prepared, and time is often of the essence.",
+    Good: "Your accounting and finance function is in good shape. What is left is refinement — speed, consistency, and having the right person or team available when something needs quiet support.",
     Great:
-      "Your finance function would hold up well under outside scrutiny, which is a real accomplishment. Keep the discipline, and keep the three-year package current.",
+      "Your accounting and finance function would hold up well under outside scrutiny, which is a real accomplishment. Keep the discipline and momentum current.",
   },
   value: {
-    Poor: "There are a few dependencies a buyer would want addressed, and you are seeing them early, which is the whole advantage. These take the longest to fix, so the next couple of years are the best possible time to work on them.",
-    Fair: "There are real strengths here alongside a few dependencies a buyer would price in. With time on your side, most of them are very fixable.",
-    Good: "The business stands on its own reasonably well, which is more than most owners can say. A couple of dependencies are worth tightening before anyone looks closely.",
+    Poor: "Often a value gap takes the longest to correct, so identification early and honestly is a good step. Understand which gaps may cause the greatest impact upon a transition or transaction, and identify meaningful and reasonable actions to take over the next 12-months. Repeat this annually and apply to other areas as capacity allows.",
+    Fair: "There are real strengths here alongside a few dependencies a buyer would price in. With time on your side, most of them are very fixable. Determine the impact each gap has on value, and continue building one meaningful step at a time.",
+    Good: "The business stands on its own reasonably well, which is more than most owners can say. Identify where you can refine and demonstrate value to the next owner. Further, can you begin to document how any changes have positively impacted the business - making it easier to tell the story to the next owner.",
     Great:
-      "This is a business that does not depend on any one person, customer, or handshake. That is worth real money — make sure the story is documented so a buyer sees it too.",
+      "This is a business that does not depend on any one person, customer, or handshake. That is worth real money — make sure the story is documented so a buyer sees it too. Further, make sure the progress made does not get stale.",
   },
   earnings: {
     // Verbatim from the workbook's Client Copy Bank (row 32, Earnings
     // column). An earlier transcription of this paragraph read "underneath
     // what instinct is where", which is ungrammatical -- that was a
     // transcription error, not a defect in the source.
-    Poor: "You have run this business on instinct and it has worked. Putting numbers underneath that instinct is where the next few points of margin come from, and it is usually the fastest improvement in this whole assessment.",
-    Fair: "You have a good feel for what is working in this business, and that feel is usually right. Putting real data behind it is typically the fastest money in this entire assessment.",
-    Good: "You track the right things, and that discipline is already paying off. The opportunity now is turning good reporting into steady margin improvement.",
+    Poor: "You have run this business on instinct and it may have worked for you up to this point. Putting numbers underneath that instinct is where the next few points of margin come from, and it can be one of the fastest areas to improve. Visibility and awareness is a great start.",
+    Fair: "You have a good feel for what is working in this business, and that feel is usually right. Putting real data behind it can provide the momentum to take action, and this area can be one of the quickest to improve.",
+    Good: "You track the right things, and that discipline is already paying off. The opportunity now is turning good reporting into steady margin improvement. Can you now identify the business actions and processes that are driving these results?",
     Great:
-      "You know your numbers and how you compare to your peers. Keep it up: margin discipline shows up directly in what the business is worth.",
+      "You know your numbers and how you compare to your peers. Keep it up: margin discipline shows up directly in what the business is worth. If you haven't already, begin to document business actions and processes that are driving these results.",
   },
 };
 

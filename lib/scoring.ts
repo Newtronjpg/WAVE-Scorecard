@@ -71,7 +71,7 @@ export const READINESS_BANDS: ReadinessBand[] = [
     // in a different phrase ("which is the whole advantage"), so there is no
     // literal repetition to remove.
     description:
-      "There is real work ahead, and none of it is unusual or unfixable. Owners who start from here and give themselves a few years routinely end up somewhere very different — the advantage is knowing now rather than at the closing table.",
+      "Don’t be alarmed. This is more common than one might think. The good news is that you have identified that you need help accomplishing your goals. The next steps are critical to gain some momentum and start working towards. You have some real work ahead, but with the right partners – we can help you make up meaningful ground in a way that is not overwhelming.",
   },
   {
     label: "Fair",
@@ -82,7 +82,7 @@ export const READINESS_BANDS: ReadinessBand[] = [
     // paragraph's "closing the distance between that thinking and a plan
     // you could act on".
     description:
-      "This is where most owners sit, and it is where starting early pays off the most. What separates where you are from where you want to land is real — and it is the kind of ground a focused couple of years can cover.",
+      "Relax. This is where most owners sit, and it is where starting early pays off the most. What separates where you are from where you want to be is real. The first step is understanding where you are – the next steps are prioritizing what is most important and reasonably able to be accomplished and then assembling a small team to help advance and hold stakeholders accountable.",
   },
   {
     label: "Good",
@@ -91,7 +91,7 @@ export const READINESS_BANDS: ReadinessBand[] = [
     // repeated the Good/Wealth paragraph's "You are further along than most
     // owners" (and Good/Value's "more than most owners can say").
     description:
-      "You are in better shape than you might expect, and the hard part is behind you. A focused year or two on the right things could meaningfully change how this ends.",
+      "Well done. You are in good shape and ahead of most business owners in your position. Getting to where you are has likely not been easy, and getting over the finish line can often be the hardest task. Often, at this stage – there are certain steps that may require specialized assistance from outside advisors (tax, valuation, succession planning, diligence preparation, legal preparation, etc.). Making sure you have the right team in place to address these areas is critical and helps ensure the momentum you have built can sustain through the finish line.",
   },
   {
     label: "Great",
@@ -100,7 +100,7 @@ export const READINESS_BANDS: ReadinessBand[] = [
     // the duplicate the copy doc flagged against the Great/Wealth
     // paragraph's "protecting what you have built".
     description:
-      "You are in strong shape, and it shows across every gap. The work now is defending that position and staying ready for a conversation you are not expecting.",
+      "Congratulations. You are in better shape than most across each gap area. The real work now is defending this position and staying ready for what lies ahead. While you can breathe easier than most – now is not the time to let up. Often, business owners face unexpected changes at the ninth hour. The good news is that you are in a good position to navigate this or see this through before the unexpected happens. If you haven’t already – make sure you have the right support around you to maintain your position and see this through.",
   },
 ];
 

@@ -216,10 +216,16 @@ describe("GAP_BAND_PARAGRAPHS", () => {
     expect(new Set(all).size).toBe(16);
   });
 
-  it("ends every paragraph with a sentence-ending period", () => {
+  // Widened from "ends with a period" when Ben's v9 copy deliberately closed
+  // the earnings/Good paragraph on a question to the owner ("Can you now
+  // identify the business actions and processes that are driving these
+  // results?"). The point of the assertion is that no paragraph was truncated
+  // mid-sentence, which a question mark satisfies just as well.
+  it("ends every paragraph on a sentence-ending mark", () => {
     for (const gap of GAPS) {
       for (const band of READINESS_BANDS) {
-        expect(GAP_BAND_PARAGRAPHS[gap.id][band.label].endsWith(".")).toBe(true);
+        const paragraph = GAP_BAND_PARAGRAPHS[gap.id][band.label];
+        expect(paragraph, `${gap.id}/${band.label}`).toMatch(/[.?!]$/);
       }
     }
   });
