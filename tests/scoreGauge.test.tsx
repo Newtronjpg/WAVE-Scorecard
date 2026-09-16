@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, cleanup } from "@testing-library/react";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { BAND_COLORS, needleAngleFor } from "@/lib/gauge";
 import { READINESS_BANDS, bandFor } from "@/lib/scoring";

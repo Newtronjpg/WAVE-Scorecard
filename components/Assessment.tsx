@@ -35,7 +35,7 @@ type ScoreResultShape = {
   saved?: boolean;
 };
 
-type View = "intro" | "section" | "submitting" | "results";
+type View = "intro" | "section" | "followUp" | "submitting" | "results";
 
 // Questions arrive as a prop, resolved server-side, so admin edits show up
 // without a redeploy. `version` is the published version that produced
@@ -69,9 +69,11 @@ export function Assessment({
   // to one stored string by resolveIndustry at submit time.
   const [industry, setIndustry] = useState("");
   const [industryOther, setIndustryOther] = useState("");
-  // Asked on the last section rather than the results page, so the answer
-  // is part of the submission and lands in the one completion email.
-  // Null means they never answered, which is not the same as "no".
+  // Asked on its own screen between the last section and the results,
+  // rather than on the results page, so the answer is still part of the
+  // submission and lands in the one completion email -- see the followUp
+  // view below. Null means they never answered, which is not the same as
+  // "no".
   const [followUpInterest, setFollowUpInterest] = useState<boolean | null>(null);
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +142,10 @@ export function Assessment({
           ? e.message
           : "Something went wrong submitting the assessment."
       );
-      setView("section");
+      // Back to the follow-up screen, not the section: that is where the
+      // submit was started from, and returning there keeps the answer they
+      // just gave on screen instead of making them find it again.
+      setView("followUp");
     }
   }
 
@@ -148,11 +153,18 @@ export function Assessment({
     if (sectionIndex < GAPS.length - 1) {
       setSectionIndex((i) => i + 1);
     } else {
-      handleFinish();
+      setView("followUp");
     }
   }
 
   function handleBack() {
+    // sectionIndex is still the last section while the follow-up screen is
+    // up, so this lands back on the questions they came from.
+    if (view === "followUp") {
+      setError(null);
+      setView("section");
+      return;
+    }
     if (sectionIndex === 0) {
       setView("intro");
     } else {
@@ -342,6 +354,65 @@ export function Assessment({
 
   // Submitting
   //
+  // Ben's second note on this screen: the follow-up question used to sit at
+  // the bottom of the last section, directly under the fifth earnings rating,
+  // where it read as a sixth earnings question rather than as a different kind
+  // of question entirely. It moves here, onto the step between the assessment
+  // and the results -- the same step the spinner occupies.
+  //
+  // It stays IN FRONT of the submit rather than alongside the spinner, and
+  // that is load-bearing rather than cosmetic: the answer has to be in the
+  // request body, because the one completion email staff asked for is sent
+  // inside /api/submit and carries it. Asking while the request is already in
+  // flight would mean the answer arrives after the email has gone, which is
+  // exactly the split that /api/follow-up and a second "wants a conversation"
+  // email existed to paper over before both were deleted (681632e).
+  //
+  // Nothing here is required. The question is optional, so the button is
+  // always live, and never answering still sends null -- which stays distinct
+  // from an explicit "not at this time".
+  if (view === "followUp") {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
+        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
+          Before your results
+        </p>
+
+        {/* A failed submit comes back here rather than to the questions, so
+            the error belongs on this screen. */}
+        {error && (
+          <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-6">
+          <FollowUpPrompt
+            value={followUpInterest}
+            onChange={setFollowUpInterest}
+          />
+        </div>
+
+        <div className="mt-10 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink hover:bg-paper-raised cursor-pointer"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={handleFinish}
+            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] cursor-pointer"
+          >
+            {error ? "Try again" : "See my results"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Previously this fell through to the section render with only the button
   // label changed, so the whole page sat still while the request was in
   // flight -- Ben's note was that it "appears to freeze before jumping to the
@@ -387,12 +458,6 @@ export function Assessment({
         />
       </div>
 
-      {error && (
-        <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
-          {error}
-        </div>
-      )}
-
       <div className="mt-8 divide-y divide-line">
         {currentQuestions.map((q) => (
           <div key={q.id} className="py-8 sm:py-9 first:pt-0">
@@ -405,17 +470,6 @@ export function Assessment({
             />
           </div>
         ))}
-        {/* Inside the same divide-y container as the questions, so it
-            inherits the rule above it and the identical vertical rhythm
-            rather than sitting apart as a tacked-on box. */}
-        {sectionIndex === GAPS.length - 1 && (
-          <div className="py-8 sm:py-9">
-            <FollowUpPrompt
-              value={followUpInterest}
-              onChange={setFollowUpInterest}
-            />
-          </div>
-        )}
       </div>
 
       <div className="mt-10 flex items-center justify-between">
@@ -429,13 +483,14 @@ export function Assessment({
         <p className="text-sm text-ink-muted">{answeredInSection} of {currentQuestions.length} answered</p>
         <button
           type="button"
-          // The submitting view has already taken over by the time a second
-          // click could land, so the guard here is only about completeness.
+          // Nothing is submitted from here any more -- the last section
+          // hands off to the follow-up screen -- so this guard is purely
+          // about not letting a section be left half-answered.
           disabled={!allAnsweredInSection}
           onClick={handleNext}
           className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          {sectionIndex === GAPS.length - 1 ? "See my results" : "Next section"}
+          {sectionIndex === GAPS.length - 1 ? "Continue" : "Next section"}
         </button>
       </div>
     </div>

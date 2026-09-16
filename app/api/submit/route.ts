@@ -217,7 +217,8 @@ export async function POST(req: NextRequest) {
     comments: z
       .record(z.string(), z.string().max(MAX_COMMENT_PAYLOAD_LENGTH))
       .optional(),
-    // Whether they want to talk, asked on the last section. Nullable and
+    // Whether they want to talk, asked on the screen between the last
+    // section and the results, just before this request. Nullable and
     // optional: not answering is legal and must never block a submission,
     // and null stays distinct from an explicit "not at this time".
     followUpInterest: z.boolean().nullable().optional(),

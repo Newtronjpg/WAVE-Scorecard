@@ -7,8 +7,8 @@ import {
   FOLLOW_UP_YES,
 } from "@/lib/followUp";
 
-// Asked on the last section, just before the assessment is submitted, so
-// the answer travels with the submission and reaches staff in the one
+// Asked on its own screen, immediately before the assessment is submitted,
+// so the answer travels with the submission and reaches staff in the one
 // completion email.
 //
 // Built from the same parts as RatingSelector rather than a native

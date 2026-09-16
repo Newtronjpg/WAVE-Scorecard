@@ -1,5 +1,5 @@
-// The question, asked on the last section just before submitting, about
-// whether the respondent wants to talk to someone.
+// The question, asked on its own screen between the last section and the
+// results, about whether the respondent wants to talk to someone.
 //
 // Dependency-free so the wording is shared by the client component, the
 // API route, and both exports rather than being retyped in four places

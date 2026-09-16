@@ -67,8 +67,12 @@ model Submission {
   // the box, and a backfill would invent a silence they never chose.
   comments Json?
 
-  // Whether the respondent asked to talk to someone, answered on the
-  // results page AFTER this row is written (see /api/follow-up).
+  // Whether the respondent asked to talk to someone, answered on the screen
+  // between the last section and the results and sent in the submit body, so
+  // it is written with the rest of this row and carried by the one completion
+  // email. (It was briefly asked on the results page instead, after this row
+  // existed, which is why /api/follow-up and a second email once existed; both
+  // were deleted in 681632e.)
   //
   // Three states, so null is meaningful: null = never answered or the
   // question predates them, true = wants a conversation, false = declined

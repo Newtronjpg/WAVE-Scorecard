@@ -5,6 +5,11 @@ import path from "node:path";
 import { Assessment } from "@/components/Assessment";
 import { withDerivedTiers } from "@/lib/questionSet";
 import { GAP_BAND_HELP } from "@/lib/resultsCopy";
+import {
+  FOLLOW_UP_NO,
+  FOLLOW_UP_QUESTION,
+  FOLLOW_UP_YES,
+} from "@/lib/followUp";
 import { scoreAssessment } from "@/lib/scoring";
 import type { Question } from "@/lib/questions";
 
@@ -40,6 +45,9 @@ function fillIntro() {
  * Ratings are role="radio" buttons labelled "<value>: <description>"; the
  * section count comes from the gaps in the question set rather than a literal,
  * so adding a gap does not silently skip one.
+ *
+ * Stops on the follow-up screen. Nothing is submitted from the last section
+ * any more, so the caller decides what to answer there.
  */
 function answerSections(rating: number) {
   const sections = new Set(V13.map((q) => q.gap)).size;
@@ -50,9 +58,19 @@ function answerSections(rating: number) {
       }
     }
     fireEvent.click(
-      screen.getByRole("button", { name: /next section|see my results/i })
+      screen.getByRole("button", { name: /next section|continue/i })
     );
   }
+}
+
+/** Leaves the follow-up screen for the results, answering it or not. */
+function leaveFollowUp(answer?: boolean) {
+  if (answer !== undefined) {
+    fireEvent.click(
+      screen.getByRole("radio", { name: answer ? FOLLOW_UP_YES : FOLLOW_UP_NO })
+    );
+  }
+  fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
 }
 
 afterEach(() => {
@@ -78,6 +96,7 @@ async function completeAssessment(rating: number) {
   fillIntro();
 
   answerSections(rating);
+  leaveFollowUp();
 
   await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
   return score;
@@ -147,8 +166,95 @@ describe("results view", () => {
     render(<Assessment questions={V13} version={13} />);
     fillIntro();
     answerSections(3);
+    leaveFollowUp();
     await waitFor(() => expect(screen.getByText(/Scoring your assessment/i)).toBeTruthy());
     expect(screen.queryByRole("button", { name: /see my results/i })).toBeNull();
     release({ ok: true, json: async () => ({ ...score, saved: true }) });
+  });
+});
+
+// Ben moved this question off the bottom of the last section and onto the step
+// between the assessment and the results. The answer still has to reach the
+// server in the submit body -- the single completion email is sent inside
+// /api/submit and carries it -- so these assert the screen AND the payload,
+// not just that a question rendered somewhere.
+describe("follow-up screen", () => {
+  /** Runs the whole flow and hands back what was POSTed to /api/submit. */
+  async function submitBodyAfter(answer?: boolean) {
+    const answers: Record<string, number> = {};
+    for (const q of V13) answers[q.id] = 3;
+    const score = scoreAssessment(answers, V13);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...score, saved: true }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    answerSections(3);
+    leaveFollowUp(answer);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    return JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+  }
+
+  it("is gone from the last section", () => {
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    answerSections(3);
+    // answerSections has just left the last section. Rewinding to it must not
+    // find the question at the bottom any more.
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(screen.queryByText(FOLLOW_UP_QUESTION)).toBeNull();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeTruthy();
+  });
+
+  it("stands between the last section and the spinner", () => {
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    answerSections(3);
+    expect(screen.getByText(FOLLOW_UP_QUESTION)).toBeTruthy();
+    // Nothing has been submitted yet, so the wait has not started.
+    expect(screen.queryByText(/Scoring your assessment/i)).toBeNull();
+  });
+
+  it("sends the answer with the submission, not after it", async () => {
+    expect((await submitBodyAfter(true)).followUpInterest).toBe(true);
+    cleanup();
+    expect((await submitBodyAfter(false)).followUpInterest).toBe(false);
+  });
+
+  it("sends null when they skip it, which is not a no", async () => {
+    // Null has to stay distinct from an explicit "not at this time": only one
+    // of those is a lead worth chasing.
+    expect((await submitBodyAfter()).followUpInterest).toBeNull();
+  });
+
+  it("never blocks the results", () => {
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    answerSections(3);
+    const go = screen.getByRole("button", { name: /see my results/i }) as HTMLButtonElement;
+    expect(go.disabled).toBe(false);
+  });
+
+  it("comes back to this screen on a failed submit, answer intact", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, json: async () => ({ error: "Nope." }) }))
+    );
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    answerSections(3);
+    leaveFollowUp(true);
+
+    await waitFor(() => expect(screen.getByText("Nope.")).toBeTruthy());
+    // The screen they retry from is this one, with what they chose still
+    // chosen -- not the last section with the answer to find again.
+    expect(screen.getByText(FOLLOW_UP_QUESTION)).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: FOLLOW_UP_YES }).getAttribute("aria-checked")
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: /try again/i })).toBeTruthy();
   });
 });
