@@ -231,14 +231,13 @@ describe("sendSubmissionNotification", () => {
   }, 15000);
 });
 
-describe("the follow-up answer in the completion email", () => {
-  function details(followUpInterest: boolean | null | undefined) {
+describe("the follow-up answer and the emails", () => {
+  function details() {
     return {
       prospectName: "Jane Owner",
       companyName: "Acme Fabrication",
       email: "jane@acme.com",
       industry: "Manufacturing",
-      followUpInterest,
       result: fakeResult(),
       adminUrl: "https://wave.example.com/admin",
       answers: { W1: 4 },
@@ -246,28 +245,24 @@ describe("the follow-up answer in the completion email", () => {
     };
   }
 
-  it("calls out a yes, and says the commitment is already made", async () => {
+  // The question is asked on the results page now, which is after the row is
+  // written and therefore after both of these emails have already gone out.
+  // Brandon's call is that a second email is not worth sending, so the answer
+  // reaches staff through the admin table and the exports instead. These
+  // assert the emails stay silent rather than guessing.
+  it("says nothing about a conversation, because it cannot know yet", async () => {
     const { buildPersistenceFailureAlert } = await import("@/lib/email");
-    const { text } = buildPersistenceFailureAlert(details(true));
-    expect(text).toContain("WANTS A CONVERSATION");
-    expect(text).toContain("already been told someone will reach out");
-  });
-
-  it("records an explicit no without shouting about it", async () => {
-    const { buildPersistenceFailureAlert } = await import("@/lib/email");
-    const { text } = buildPersistenceFailureAlert(details(false));
-    expect(text).toContain("not at this time");
+    const { text } = buildPersistenceFailureAlert(details());
     expect(text).not.toContain("WANTS A CONVERSATION");
+    expect(text).not.toContain("not at this time");
+    expect(text).not.toContain("undefined");
   });
 
-  it("says nothing at all when they never answered", async () => {
-    // Null is not a no; the email must not imply one.
-    const { buildPersistenceFailureAlert } = await import("@/lib/email");
-    for (const value of [null, undefined]) {
-      const { text } = buildPersistenceFailureAlert(details(value));
-      expect(text).not.toContain("WANTS A CONVERSATION");
-      expect(text).not.toContain("not at this time");
-      expect(text).not.toContain("undefined");
-    }
+  it("keeps the same silence in the routine completion email", async () => {
+    const { buildSubmissionNotification } = await import("@/lib/email");
+    const { text } = buildSubmissionNotification(details());
+    expect(text).not.toContain("WANTS A CONVERSATION");
+    expect(text).not.toContain("not at this time");
+    expect(text).not.toContain("undefined");
   });
 });

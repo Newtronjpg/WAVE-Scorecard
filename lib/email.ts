@@ -75,14 +75,6 @@ ${entries.map(([id, text]) => `  ${id}: ${text.trim()}`).join("\n")}
 // a "yes" is the one thing in this email that needs somebody to act, and
 // the respondent has already been told a call is coming.
 //
-// Null renders nothing at all. "Never answered" and "said not at this
-// time" are different, and only one of them is worth chasing.
-function followUpLine(interest: boolean | null | undefined): string {
-  if (interest === true) return "\nWANTS A CONVERSATION -- they have already been told someone will reach out.\n";
-  if (interest === false) return "\nAsked about a conversation: not at this time.\n";
-  return "";
-}
-
 export interface NotificationDetails {
   prospectName: string;
   companyName: string;
@@ -90,8 +82,6 @@ export interface NotificationDetails {
   // predates these fields still compiles; rendered only when present.
   email?: string;
   industry?: string;
-  // Whether they asked to talk. Null means they did not answer.
-  followUpInterest?: boolean | null;
   result: ScoreResult;
   // Optional free text the respondent attached to individual questions,
   // keyed by question id. Absent or empty renders nothing at all.
@@ -145,6 +135,43 @@ async function deliver(
   );
 }
 
+// Split out from the send for the same reason buildPersistenceFailureAlert
+// is: the wording is the part worth testing, and it should not need an SMTP
+// connection to read.
+//
+// Deliberately says nothing about whether they want a conversation. That is
+// asked on the results page, which is after this row is written and therefore
+// after this email has gone; staff read the answer in the admin table and the
+// exports instead.
+export function buildSubmissionNotification(details: NotificationDetails): {
+  subject: string;
+  text: string;
+} {
+  const { prospectName, companyName, result } = details;
+  const comments = commentSection(details.comments);
+  const contact = [
+    details.email ? `Email:    ${details.email}` : "",
+    details.industry ? `Industry: ${details.industry}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const gapLines = result.gaps.map((g) => `${g.name}: ${g.score}/100`).join("\n");
+
+  return {
+    subject: `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
+    text: `${prospectName} at ${companyName} just finished the WAVE Scorecard.
+${contact ? `\n${contact}\n` : ""}
+Overall: ${result.overallScore}/100 (${result.band.label})
+
+${gapLines}
+
+Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
+${comments}
+Full submission and export: ${details.adminUrl}`,
+  };
+}
+
 export async function sendSubmissionNotification(
   details: NotificationDetails
 ): Promise<{ sent: boolean; reason?: string }> {
@@ -157,34 +184,8 @@ export async function sendSubmissionNotification(
   }
 
   try {
-    const { prospectName, companyName, result } = details;
-    const comments = commentSection(details.comments);
-    const followUp = followUpLine(details.followUpInterest);
-    const contact = [
-      details.email ? `Email:    ${details.email}` : "",
-      details.industry ? `Industry: ${details.industry}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const gapLines = result.gaps
-      .map((g) => `${g.name}: ${g.score}/100`)
-      .join("\n");
-
-    await deliver(
-      config,
-      `${prospectName} (${companyName}) completed the WAVE Scorecard, ${result.overallScore}/100`,
-      `${prospectName} at ${companyName} just finished the WAVE Scorecard.
-${followUp}${contact ? `\n${contact}\n` : ""}
-Overall: ${result.overallScore}/100 (${result.band.label})
-
-${gapLines}
-
-Widest gap: ${result.widestGap.name} (${result.widestGap.score}/100)
-${comments}
-Full submission and export: ${details.adminUrl}`
-    );
-
+    const { subject, text } = buildSubmissionNotification(details);
+    await deliver(config, subject, text);
     return { sent: true };
   } catch (e) {
     console.error("Failed to send submission notification email:", e);
@@ -199,7 +200,6 @@ export interface PersistenceFailureDetails {
   answers: Record<string, number>;
   email?: string;
   industry?: string;
-  followUpInterest?: boolean | null;
   // Optional per-question context. On this path the email is the only
   // surviving copy of the submission, so the respondent's own words have
   // to travel with the ratings or they are gone.
@@ -259,7 +259,7 @@ THIS EMAIL IS THE ONLY COPY OF THIS SUBMISSION. It is not in the admin
 table and it will not appear in the Excel export. Save it somewhere
 before deleting this message.
 
-Prospect: ${prospectName}${followUpLine(details.followUpInterest)}
+Prospect: ${prospectName}
 Company:  ${companyName}${details.email ? `\nEmail:    ${details.email}` : ""}${
       details.industry ? `\nIndustry: ${details.industry}` : ""
     }

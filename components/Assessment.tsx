@@ -1,16 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GAPS, type Gap, type Question } from "@/lib/questions";
 import { RatingSelector } from "./RatingSelector";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
+import {
+  FOLLOW_UP_NOTE_HINT,
+  FOLLOW_UP_NOTE_LABEL,
+  MAX_FOLLOW_UP_NOTE_LENGTH,
+} from "@/lib/followUp";
 import { bandColorFor } from "@/lib/gauge";
 import { resolveIndustry } from "@/lib/contact";
 import {
-  GAP_BAND_HELP,
+  GAP_BAND_WORK,
   GAP_ORDER,
+  GAP_WORK_HEADING,
   buildGapParagraph,
   resolvePhrases,
 } from "@/lib/resultsCopy";
@@ -33,9 +39,13 @@ type ScoreResultShape = {
   // False when the score was computed but could not be written to the
   // database. Optional so an older cached client bundle still renders.
   saved?: boolean;
+  // The row's id, for /api/follow-up. Null when the write failed, and absent
+  // entirely from /admin/preview -- in both cases there is nothing to attach
+  // a follow-up answer to, and the results page must not pretend otherwise.
+  submissionId?: string | null;
 };
 
-type View = "intro" | "section" | "followUp" | "submitting" | "results";
+type View = "intro" | "section" | "submitting" | "results";
 
 // Questions arrive as a prop, resolved server-side, so admin edits show up
 // without a redeploy. `version` is the published version that produced
@@ -69,12 +79,16 @@ export function Assessment({
   // to one stored string by resolveIndustry at submit time.
   const [industry, setIndustry] = useState("");
   const [industryOther, setIndustryOther] = useState("");
-  // Asked on its own screen between the last section and the results,
-  // rather than on the results page, so the answer is still part of the
-  // submission and lands in the one completion email -- see the followUp
-  // view below. Null means they never answered, which is not the same as
-  // "no".
+  // Asked on the results page, after the row exists, and sent back on its own
+  // via /api/follow-up. Null means they never answered, which is not the same
+  // as "no" -- and it is also what keeps "Print my results" locked.
   const [followUpInterest, setFollowUpInterest] = useState<boolean | null>(null);
+  // Offered only alongside a yes: what they would like the conversation to
+  // cover. Always optional.
+  const [followUpNote, setFollowUpNote] = useState("");
+  // What the server was last told, so blurring an untouched box, or answering
+  // the same way twice, does not spend a write.
+  const lastRecorded = useRef<string | null>(null);
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,29 +156,74 @@ export function Assessment({
           ? e.message
           : "Something went wrong submitting the assessment."
       );
-      // Back to the follow-up screen, not the section: that is where the
-      // submit was started from, and returning there keeps the answer they
-      // just gave on screen instead of making them find it again.
-      setView("followUp");
+      setView("section");
     }
+  }
+
+  // The row's id, when there is one. /admin/preview never returns it (nothing
+  // was written), and a failed save returns null, so both of those collapse to
+  // "there is nothing to record against" -- which is also what unlocks the
+  // print button rather than trapping someone behind a question whose answer
+  // could not be stored anyway.
+  const submissionId = result?.submissionId ?? null;
+
+  /**
+   * Sends the answer to /api/follow-up. Deliberately fire-and-forget: their
+   * results are already on screen and correct, and a failed write here is not
+   * worth an error banner over the top of them. It is skipped entirely when
+   * the value has not changed since the last successful send.
+   */
+  function recordFollowUp(interest: boolean | null, note: string) {
+    if (!submissionId) return;
+    const payload = JSON.stringify({
+      submissionId,
+      followUpInterest: interest,
+      // A note only travels with a yes. Switching to "not at this time" after
+      // typing one withdraws it, and the server enforces the same rule.
+      //
+      // Empty normalises to null here as well as on the server, so that
+      // clearing the box and never typing in it produce the identical
+      // payload -- otherwise the two are different strings and the
+      // "has this actually changed" check below would send a pointless write.
+      followUpNote: interest === true && note.trim() ? note.trim() : null,
+    });
+    if (payload === lastRecorded.current) return;
+    lastRecorded.current = payload;
+    void fetch("/api/follow-up", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      // The tab can be closing on the way to the printer; this asks the
+      // browser to finish the request anyway.
+      keepalive: true,
+    }).catch(() => {
+      // Let the next change retry rather than stranding the value.
+      lastRecorded.current = null;
+    });
+  }
+
+  function handleFollowUpChange(value: boolean | null) {
+    setFollowUpInterest(value);
+    if (value !== true) setFollowUpNote("");
+    recordFollowUp(value, value === true ? followUpNote : "");
+  }
+
+  function handlePrint() {
+    // Flushes a note they typed and never blurred -- clicking the button does
+    // blur the textarea, but not before this handler runs in every browser.
+    recordFollowUp(followUpInterest, followUpNote);
+    window.print();
   }
 
   function handleNext() {
     if (sectionIndex < GAPS.length - 1) {
       setSectionIndex((i) => i + 1);
     } else {
-      setView("followUp");
+      handleFinish();
     }
   }
 
   function handleBack() {
-    // sectionIndex is still the last section while the follow-up screen is
-    // up, so this lands back on the questions they came from.
-    if (view === "followUp") {
-      setError(null);
-      setView("section");
-      return;
-    }
     if (sectionIndex === 0) {
       setView("intro");
     } else {
@@ -176,6 +235,8 @@ export function Assessment({
     setAnswers({});
     setComments({});
     setFollowUpInterest(null);
+    setFollowUpNote("");
+    lastRecorded.current = null;
     // Name, company, email, and industry deliberately persist: "Start
     // over" retakes the assessment, it does not become a different
     // person, and re-typing all four is pure friction.
@@ -206,6 +267,10 @@ export function Assessment({
 
   // Results
   if (view === "results" && result) {
+    // Unlocked by an answer -- either answer -- or by there being nothing to
+    // record against in the first place.
+    const canPrint = followUpInterest !== null || !submissionId;
+
     return (
       <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
         <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
@@ -267,18 +332,23 @@ export function Assessment({
               <p className="mt-2 text-ink leading-relaxed">
                 {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, g.lowestRating, phrases)}
               </p>
-              {/* Ben's "where we can help" copy for this gap at this band. A
-                  tinted block rather than another paragraph, so the shift from
-                  "here is where you stand" to "here is what we would do" is
-                  visible without a heading shouting it. */}
-              <div className="mt-4 rounded-md bg-[var(--color-tint)] px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                  Where we can help
-                </p>
-                <p className="mt-1.5 text-sm text-ink leading-relaxed">
-                  {GAP_BAND_HELP[g.gap][g.band.label]}
-                </p>
-              </div>
+              {/* Work F&W has already done for a business in this position.
+                  A tinted block rather than another paragraph, so the shift
+                  from "here is where you stand" to "here is what that has
+                  looked like" is visible without a heading shouting it.
+                  Rendered only when there is copy: the block is awaiting
+                  Brandon's language, and an empty tinted box on a live results
+                  page reads as a bug. */}
+              {GAP_BAND_WORK[g.gap][g.band.label] && (
+                <div className="mt-4 rounded-md bg-[var(--color-tint)] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    {GAP_WORK_HEADING}
+                  </p>
+                  <p className="mt-1.5 text-sm text-ink leading-relaxed">
+                    {GAP_BAND_WORK[g.gap][g.band.label]}
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -332,7 +402,48 @@ export function Assessment({
           </div>
         </section>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-3 print:hidden">
+        {/* Brandon's placement: the question sits with the two things someone
+            does at the end, not on a screen of its own before the results.
+            Print stays locked until it is answered -- the one moment we have
+            their attention is the moment they want the printout, so that is
+            where the ask goes. Interactive, so it never reaches the printout
+            itself. */}
+        <div className="mt-10 border-t border-line pt-8 print:hidden">
+          <FollowUpPrompt
+            value={followUpInterest}
+            onChange={handleFollowUpChange}
+          />
+
+          {/* Only alongside a yes. Asking someone who just declined what they
+              would like to discuss reads as not having listened. */}
+          {followUpInterest === true && (
+            <div className="mt-6">
+              <label
+                htmlFor="followUpNote"
+                className="block font-display text-lg text-ink"
+              >
+                {FOLLOW_UP_NOTE_LABEL}
+              </label>
+              <p className="mt-1 text-sm text-ink-muted leading-relaxed">
+                {FOLLOW_UP_NOTE_HINT}
+              </p>
+              <textarea
+                id="followUpNote"
+                rows={4}
+                maxLength={MAX_FOLLOW_UP_NOTE_LENGTH}
+                value={followUpNote}
+                onChange={(e) => setFollowUpNote(e.target.value)}
+                // Written on blur rather than on every keystroke: this is one
+                // paragraph, not a document, and a write per character would
+                // burn the endpoint's throttle on a single sentence.
+                onBlur={() => recordFollowUp(followUpInterest, followUpNote)}
+                className="mt-3 block w-full rounded-md border border-line bg-paper-raised px-3 py-2 text-sm text-ink leading-relaxed focus:border-maroon focus:outline-none"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 print:hidden">
           <button
             type="button"
             onClick={handleStartOver}
@@ -342,77 +453,34 @@ export function Assessment({
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] cursor-pointer"
+            onClick={handlePrint}
+            // Locked until they answer -- but never when there is nothing to
+            // record against, because then the question is unanswerable in
+            // any useful sense and locking it would just strand them with a
+            // printout they cannot take.
+            disabled={!canPrint}
+            aria-describedby={canPrint ? undefined : "printLockReason"}
+            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             Print my results
           </button>
         </div>
+        {!canPrint && (
+          // Said plainly rather than left to a greyed-out button. A disabled
+          // control with no stated reason reads as a broken page.
+          <p
+            id="printLockReason"
+            className="mt-3 text-sm text-ink-muted print:hidden"
+          >
+            Answer the question above to print your results.
+          </p>
+        )}
       </div>
     );
   }
 
   // Submitting
   //
-  // Ben's second note on this screen: the follow-up question used to sit at
-  // the bottom of the last section, directly under the fifth earnings rating,
-  // where it read as a sixth earnings question rather than as a different kind
-  // of question entirely. It moves here, onto the step between the assessment
-  // and the results -- the same step the spinner occupies.
-  //
-  // It stays IN FRONT of the submit rather than alongside the spinner, and
-  // that is load-bearing rather than cosmetic: the answer has to be in the
-  // request body, because the one completion email staff asked for is sent
-  // inside /api/submit and carries it. Asking while the request is already in
-  // flight would mean the answer arrives after the email has gone, which is
-  // exactly the split that /api/follow-up and a second "wants a conversation"
-  // email existed to paper over before both were deleted (681632e).
-  //
-  // Nothing here is required. The question is optional, so the button is
-  // always live, and never answering still sends null -- which stays distinct
-  // from an explicit "not at this time".
-  if (view === "followUp") {
-    return (
-      <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
-        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
-          Before your results
-        </p>
-
-        {/* A failed submit comes back here rather than to the questions, so
-            the error belongs on this screen. */}
-        {error && (
-          <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-6">
-          <FollowUpPrompt
-            value={followUpInterest}
-            onChange={setFollowUpInterest}
-          />
-        </div>
-
-        <div className="mt-10 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink hover:bg-paper-raised cursor-pointer"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            onClick={handleFinish}
-            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] cursor-pointer"
-          >
-            {error ? "Try again" : "See my results"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Previously this fell through to the section render with only the button
   // label changed, so the whole page sat still while the request was in
   // flight -- Ben's note was that it "appears to freeze before jumping to the
@@ -458,6 +526,12 @@ export function Assessment({
         />
       </div>
 
+      {error && (
+        <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
+          {error}
+        </div>
+      )}
+
       <div className="mt-8 divide-y divide-line">
         {currentQuestions.map((q) => (
           <div key={q.id} className="py-8 sm:py-9 first:pt-0">
@@ -483,14 +557,13 @@ export function Assessment({
         <p className="text-sm text-ink-muted">{answeredInSection} of {currentQuestions.length} answered</p>
         <button
           type="button"
-          // Nothing is submitted from here any more -- the last section
-          // hands off to the follow-up screen -- so this guard is purely
-          // about not letting a section be left half-answered.
+          // The submitting view has already taken over by the time a second
+          // click could land, so the guard here is only about completeness.
           disabled={!allAnsweredInSection}
           onClick={handleNext}
           className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          {sectionIndex === GAPS.length - 1 ? "Continue" : "Next section"}
+          {sectionIndex === GAPS.length - 1 ? "See my results" : "Next section"}
         </button>
       </div>
     </div>

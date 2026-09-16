@@ -74,6 +74,10 @@ export async function buildSubmissionsWorkbook(
     { header: "Email", key: "email", width: 28 },
     { header: "Industry", key: "industry", width: 24 },
     { header: "Follow-up", key: "followUp", width: 14 },
+    // Wide, because this is a sentence rather than a value. It is the only
+    // place outside the per-run export that staff see what someone actually
+    // wants to talk about -- no email carries it.
+    { header: "Wants to discuss", key: "followUpNote", width: 48 },
     { header: "Question set", key: "questionSetVersion", width: 12 },
   ];
 
@@ -92,6 +96,7 @@ export async function buildSubmissionsWorkbook(
       email: s.email ?? "",
       industry: s.industry ?? "",
       followUp: followUpLabel(s.followUpInterest),
+      followUpNote: s.followUpNote ?? "",
       readinessBand: s.readinessBand,
       questionSetVersion: s.questionSetVersion ?? "factory",
     });

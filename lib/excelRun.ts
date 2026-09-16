@@ -41,6 +41,11 @@ export async function buildRunWorkbook(
   sheet.addRow(["Overall score", submission.overallScore]);
   sheet.addRow(["Readiness band", submission.readinessBand]);
   sheet.addRow(["Follow-up requested", followUpLabel(submission.followUpInterest)]);
+  // Only when there is one. A "Wants to discuss" row reading empty on every
+  // other run would be noise in a sheet someone opens to read one submission.
+  if (submission.followUpNote) {
+    sheet.addRow(["Wants to discuss", submission.followUpNote]);
+  }
   sheet.addRow([]);
 
   const headerRowNumber = sheet.rowCount + 1;

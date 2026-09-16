@@ -151,8 +151,24 @@ export default async function AdminPage() {
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   {s.followUpInterest === true ? (
-                    <span className="rounded-full bg-maroon px-2 py-0.5 text-xs font-medium text-white">
-                      Yes
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="rounded-full bg-maroon px-2 py-0.5 text-xs font-medium text-white">
+                        Yes
+                      </span>
+                      {s.followUpNote && (
+                        // Same marker pattern as a per-question note: the full
+                        // text lives in the export, so without something here
+                        // nobody knows there is anything to open. No email
+                        // carries it either, which makes this the only hint.
+                        <span
+                          title={s.followUpNote}
+                          aria-label={`Wants to discuss: ${s.followUpNote}`}
+                          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--color-tint)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-maroon"
+                        >
+                          <span aria-hidden="true">&#9998;</span>
+                          note
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span className="text-ink-muted">

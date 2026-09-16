@@ -801,7 +801,11 @@ describe("POST /api/submit and the respondent's contact details", () => {
 // section, so the answer travels with the submission and lands in the one
 // completion email instead of arriving separately after it.
 describe("POST /api/submit and the follow-up question", () => {
-  it("persists a yes and puts it in the completion email", async () => {
+  // The current client never sends this field: the question moved to the
+  // results page and now arrives via /api/follow-up. A browser still holding
+  // an older cached bundle does send it, and storing that is better than
+  // discarding it -- which is the only reason the field survives here.
+  it("still stores a yes from an older cached client", async () => {
     createMock.mockResolvedValue({ id: "abc" });
     const { POST } = await import("@/app/api/submit/route");
     vi.resetModules();
@@ -809,7 +813,20 @@ describe("POST /api/submit and the follow-up question", () => {
     await POST(submitRequest({ ...validBody, followUpInterest: true }) as never);
 
     expect(createMock.mock.calls[0][0].data.followUpInterest).toBe(true);
-    expect(notifyMock.mock.calls[0][0].followUpInterest).toBe(true);
+  });
+
+  it("keeps the answer out of the completion email entirely", async () => {
+    // Brandon's call: no second email, and this one goes out before the
+    // question is even asked. Staff read the answer in the admin table and
+    // the exports instead, so the email must not carry a stale or empty
+    // version of it.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    await POST(submitRequest({ ...validBody, followUpInterest: true }) as never);
+
+    expect(notifyMock.mock.calls[0][0]).not.toHaveProperty("followUpInterest");
   });
 
   it("persists an explicit no", async () => {
@@ -861,22 +878,38 @@ describe("POST /api/submit and the follow-up question", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it("carries the answer into the alert when the write fails", async () => {
+  it("keeps it out of the failure alert too", async () => {
+    // That alert exists to rescue answers from a lost submission. A follow-up
+    // value is not one of them -- there is no row to attach it to, and the
+    // question has not been asked yet.
     createMock.mockRejectedValue(new Error("db down"));
     const { POST } = await import("@/app/api/submit/route");
     vi.resetModules();
 
     await POST(submitRequest({ ...validBody, followUpInterest: true }) as never);
 
-    expect(alertMock.mock.calls[0][0].followUpInterest).toBe(true);
+    expect(alertMock.mock.calls[0][0]).not.toHaveProperty("followUpInterest");
   });
 
-  it("no longer returns a submission id, since nothing needs one", async () => {
+  it("returns the row id, which is the address /api/follow-up needs", async () => {
     createMock.mockResolvedValue({ id: "abc" });
     const { POST } = await import("@/app/api/submit/route");
     vi.resetModules();
 
     const json = await (await POST(submitRequest(validBody) as never)).json();
-    expect(json.submissionId).toBeUndefined();
+    expect(json.submissionId).toBe("abc");
+  });
+
+  it("returns a null id when the write failed, so nothing is addressed", async () => {
+    // The results page reads this as "there is nothing to record against" and
+    // leaves the print button unlocked rather than trapping someone behind a
+    // question whose answer could not be stored.
+    createMock.mockRejectedValue(new Error("db down"));
+    const { POST } = await import("@/app/api/submit/route");
+    vi.resetModules();
+
+    const json = await (await POST(submitRequest(validBody) as never)).json();
+    expect(json.submissionId).toBeNull();
+    expect(json.saved).toBe(false);
   });
 });

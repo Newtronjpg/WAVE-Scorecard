@@ -67,18 +67,31 @@ model Submission {
   // the box, and a backfill would invent a silence they never chose.
   comments Json?
 
-  // Whether the respondent asked to talk to someone, answered on the screen
-  // between the last section and the results and sent in the submit body, so
-  // it is written with the rest of this row and carried by the one completion
-  // email. (It was briefly asked on the results page instead, after this row
-  // existed, which is why /api/follow-up and a second email once existed; both
-  // were deleted in 681632e.)
+  // Whether the respondent asked to talk to someone, answered on the results
+  // page after this row is written, and sent by /api/follow-up rather than by
+  // the submit that created the row.
+  //
+  // No email carries it. The completion email goes out when the row is
+  // written, which is necessarily before this is answered, and Brandon's call
+  // is that a second email is not worth it -- staff read this in the admin
+  // table and the exports instead.
   //
   // Three states, so null is meaningful: null = never answered or the
   // question predates them, true = wants a conversation, false = declined
   // for now. A default of false would make "didn't answer" indistinguish-
   // able from "said no", and those are very different for follow-up.
   followUpInterest Boolean?
+
+  // Optional free text, offered only to someone who answered yes above:
+  // what they would like the conversation to cover. Null covers three
+  // different silences -- never answered the question, said no, or said yes
+  // and left the box alone -- and followUpInterest is what distinguishes
+  // them, so this column never needs to.
+  //
+  // Written by /api/follow-up after the row exists, like followUpInterest
+  // itself, and deliberately not carried by any email: staff read both in
+  // the admin table and the exports.
+  followUpNote String?
 
   // Which published question set this run answered. Null means the
   // factory default, including every run taken before versioning existed.

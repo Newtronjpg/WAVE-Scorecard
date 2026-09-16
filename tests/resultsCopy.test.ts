@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  GAP_BAND_HELP,
+  GAP_BAND_WORK,
   PHRASE_TABLE,
   QUESTION_PHRASES,
   GAP_BAND_PARAGRAPHS,
@@ -359,44 +359,59 @@ describe("resolvePhrases", () => {
   });
 });
 
-describe("GAP_BAND_HELP", () => {
-  it("has a line for every gap at every band", () => {
+describe("GAP_BAND_WORK", () => {
+  // Written to pass while the block is empty AND to validate Brandon's copy
+  // the moment it lands, so adding the text needs no edit here. Every rule
+  // below applies to whatever is present and skips whatever is not.
+  const filled = () =>
+    GAPS.flatMap((gap) =>
+      READINESS_BANDS.map((band) => ({
+        key: `${gap.id}/${band.label}`,
+        text: GAP_BAND_WORK[gap.id][band.label],
+        paragraph: GAP_BAND_PARAGRAPHS[gap.id][band.label],
+      }))
+    ).filter((entry) => entry.text.length > 0);
+
+  it("keeps a slot for every gap at every band", () => {
+    // The shape is the part that must not drift while the copy is pending:
+    // it is what guarantees the new text can only be dropped into a real
+    // gap/band pair rather than a key nothing reads.
     for (const gap of GAPS) {
       for (const band of READINESS_BANDS) {
-        const help = GAP_BAND_HELP[gap.id]?.[band.label];
-        expect(help, `${gap.id}/${band.label}`).toBeTruthy();
-        expect(help.trim(), `${gap.id}/${band.label}`).toBe(help);
+        expect(
+          GAP_BAND_WORK[gap.id]?.[band.label],
+          `${gap.id}/${band.label}`
+        ).toBeTypeOf("string");
       }
     }
   });
 
-  it("ends every line on a sentence-ending mark", () => {
-    for (const gap of GAPS) {
-      for (const band of READINESS_BANDS) {
-        expect(GAP_BAND_HELP[gap.id][band.label], `${gap.id}/${band.label}`).toMatch(
-          /[.?!]$/
-        );
-      }
+  it("is either fully written or fully empty, never half", () => {
+    // A half-filled table means some results show the block and some do not,
+    // for no reason the reader can see. Either state is fine; the mixture is
+    // the bug.
+    const count = filled().length;
+    expect([0, GAPS.length * READINESS_BANDS.length]).toContain(count);
+  });
+
+  it("stores every line trimmed and ended on a sentence mark", () => {
+    for (const { key, text } of filled()) {
+      expect(text.trim(), key).toBe(text);
+      expect(text, key).toMatch(/[.?!]$/);
     }
   });
 
-  // These describe what F&W would do, so they must not be the same sentence as
-  // the diagnosis directly above them on the page.
   it("never repeats the gap paragraph it sits under", () => {
-    for (const gap of GAPS) {
-      for (const band of READINESS_BANDS) {
-        expect(GAP_BAND_HELP[gap.id][band.label]).not.toBe(
-          GAP_BAND_PARAGRAPHS[gap.id][band.label]
-        );
-      }
+    // This is meant to evidence what F&W has done, so it must not be the same
+    // sentence as the diagnosis directly above it on the page.
+    for (const { key, text, paragraph } of filled()) {
+      expect(text, key).not.toBe(paragraph);
     }
   });
 
   it("carries no spelling fixes the transcription script should have caught", () => {
-    for (const gap of GAPS) {
-      for (const band of READINESS_BANDS) {
-        expect(GAP_BAND_HELP[gap.id][band.label]).not.toMatch(/buisness|efficent/);
-      }
+    for (const { key, text } of filled()) {
+      expect(text, key).not.toMatch(/buisness|efficent/);
     }
   });
 });

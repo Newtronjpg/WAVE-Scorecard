@@ -217,10 +217,12 @@ export async function POST(req: NextRequest) {
     comments: z
       .record(z.string(), z.string().max(MAX_COMMENT_PAYLOAD_LENGTH))
       .optional(),
-    // Whether they want to talk, asked on the screen between the last
-    // section and the results, just before this request. Nullable and
-    // optional: not answering is legal and must never block a submission,
-    // and null stays distinct from an explicit "not at this time".
+    // Whether they want to talk. The current client never sends this -- the
+    // question moved to the results page and now arrives via /api/follow-up --
+    // but a browser still holding an older cached bundle does, and storing
+    // that is better than discarding it. Nullable and optional either way:
+    // not answering is legal and must never block a submission, and null
+    // stays distinct from an explicit "not at this time".
     followUpInterest: z.boolean().nullable().optional(),
     // Optional so an older cached client bundle that doesn't send it still
     // works via the live-published fallback above.
@@ -269,8 +271,9 @@ export async function POST(req: NextRequest) {
     reason: "not attempted",
   };
 
+  let submissionId: string | null = null;
   try {
-    await db.submission.create({
+    const created = await db.submission.create({
       data: {
         prospectName,
         companyName,
@@ -297,7 +300,12 @@ export async function POST(req: NextRequest) {
         // ever unreadable. See prisma/schema.prisma for the full rationale.
         questionSetSnapshot: toStored(questions) as unknown as Prisma.InputJsonValue,
       },
+      // Only the id. The client needs an address for /api/follow-up and
+      // nothing else; selecting the whole row would ship the snapshot back
+      // to the browser for no reason.
+      select: { id: true },
     });
+    submissionId = created.id;
   } catch (e) {
     // The person taking the assessment should still see their results
     // even if the save fails -- but a swallowed failure here once lost
@@ -313,7 +321,6 @@ export async function POST(req: NextRequest) {
         companyName,
         email,
         industry,
-        followUpInterest,
         recipients,
         answers,
         comments: comments ?? {},
@@ -342,7 +349,6 @@ export async function POST(req: NextRequest) {
       companyName,
       email,
       industry,
-      followUpInterest,
       result,
       // Without this, context only ever reached staff when a submission
       // FAILED to save -- on the happy path the note sat in the run export
@@ -361,8 +367,15 @@ export async function POST(req: NextRequest) {
   // never appears on a real deploy, so it can't leak mail status to a
   // client. `saved` ships in production too: the client needs it to tell
   // the person their results weren't recorded.
+  // submissionId is null whenever the write failed, and the client reads that
+  // as "there is nothing to attach a follow-up to" -- see the results page.
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ ...result, saved });
+    return NextResponse.json({ ...result, saved, submissionId });
   }
-  return NextResponse.json({ ...result, saved, _notification: notification });
+  return NextResponse.json({
+    ...result,
+    saved,
+    submissionId,
+    _notification: notification,
+  });
 }
