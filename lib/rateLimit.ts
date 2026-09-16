@@ -71,12 +71,28 @@ export function evaluateWindow(
 // database, and a hash means a leak of that table is not a list of every
 // visitor's IP address. Truncated because collisions across a handful of
 // keys are harmless here and shorter keys index better.
+// Which header to trust, in order, and why the obvious one is last.
+//
+// `x-forwarded-for` is APPENDED to by each proxy, so on Vercel the chain is
+// "<whatever the client sent>, <the real client IP>". Reading the FIRST entry
+// -- the conventional "original client" position -- therefore reads a value
+// the caller chose, and anyone can defeat every throttle in this app by
+// sending a different X-Forwarded-For on each request. That is exactly how
+// this function used to work.
+//
+// `x-vercel-forwarded-for` and `x-real-ip` are set by the platform and
+// overwrite anything the client sent, so they are trustworthy. x-forwarded-for
+// is kept only as a last resort for running behind something else, and then
+// the LAST entry is taken, because that is the hop closest to us and the only
+// one the caller could not have written.
 export function clientIdentifier(headers: Headers): string {
-  const forwarded = headers.get("x-forwarded-for");
+  const chain = headers.get("x-forwarded-for")?.split(",") ?? [];
+  const nearestHop = chain.length > 0 ? chain[chain.length - 1]?.trim() : "";
+
   const raw =
-    // A proxy chain lists the original client first.
-    forwarded?.split(",")[0]?.trim() ||
+    headers.get("x-vercel-forwarded-for")?.trim() ||
     headers.get("x-real-ip")?.trim() ||
+    nearestHop ||
     "unknown";
 
   return createHash("sha256").update(raw).digest("hex").slice(0, 32);
@@ -94,8 +110,12 @@ export interface RateLimitResult {
 export async function checkRateLimit(
   key: string,
   max: number = SUBMIT_MAX_PER_WINDOW,
-  windowMs: number = SUBMIT_WINDOW_MS
+  windowMs: number = SUBMIT_WINDOW_MS,
+  // Fail-open is right for the public assessment and wrong for a login; the
+  // caller decides. See the note on the catch block below.
+  options: { failOpen?: boolean } = {}
 ): Promise<RateLimitResult> {
+  const failOpen = options.failOpen ?? true;
   const now = new Date();
 
   try {
@@ -127,7 +147,17 @@ export async function checkRateLimit(
       retryAfterSeconds: decision.retryAfterSeconds,
     };
   } catch (e) {
-    console.error("Rate limit check failed, allowing the request:", e);
-    return { allowed: true, retryAfterSeconds: 0 };
+    // Fails OPEN by default: a database blip must not turn into a locked-out
+    // assessment, and losing throttling on a public form is the smaller harm.
+    //
+    // Callers guarding a CREDENTIAL pass failOpen: false, because there the
+    // trade reverses -- unlimited guessing while the store is down is far
+    // worse than an unavailable login.
+    if (failOpen) {
+      console.error("Rate limit check failed, allowing the request:", e);
+      return { allowed: true, retryAfterSeconds: 0 };
+    }
+    console.error("Rate limit check failed, DENYING the request:", e);
+    return { allowed: false, retryAfterSeconds: 60 };
   }
 }

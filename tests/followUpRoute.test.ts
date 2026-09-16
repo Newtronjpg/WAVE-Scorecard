@@ -1,19 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { MAX_FOLLOW_UP_NOTE_LENGTH } from "@/lib/followUp";
+import {
+  FOLLOW_UP_WRITE_WINDOW_MS,
+  MAX_FOLLOW_UP_NOTE_LENGTH,
+} from "@/lib/followUp";
 
 // /api/follow-up exists because the question moved to the results page, which
 // is after the row is written and after the completion email has gone. It is
 // the ONLY path by which the answer reaches anybody -- no email carries it --
 // so these pin the write itself, not just the status code.
 
-const updateMock = vi.fn();
+const updateManyMock = vi.fn();
 const findUniqueMock = vi.fn().mockResolvedValue(null);
 const upsertMock = vi.fn().mockResolvedValue({});
 
 vi.mock("@/lib/db", () => ({
   db: {
-    submission: { update: (...args: unknown[]) => updateMock(...args) },
+    submission: {
+      updateMany: (...args: unknown[]) => updateManyMock(...args),
+    },
     // Present so the throttle takes its allow path rather than failing open
     // through its error handler, which would pass these tests for the wrong
     // reason.
@@ -34,15 +39,15 @@ function post(body: unknown) {
 
 /** What the route actually asked Prisma to write. */
 function written() {
-  return updateMock.mock.calls.at(-1)![0] as {
-    where: { id: string };
+  return updateManyMock.mock.calls.at(-1)![0] as {
+    where: { id: string; createdAt: { gt: Date } };
     data: { followUpInterest: boolean | null; followUpNote: string | null };
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  updateMock.mockResolvedValue({ id: "sub_1" });
+  updateManyMock.mockResolvedValue({ count: 1 });
   findUniqueMock.mockResolvedValue(null);
   upsertMock.mockResolvedValue({});
 });
@@ -54,7 +59,7 @@ describe("POST /api/follow-up", () => {
       post({ submissionId: "sub_1", followUpInterest: true, followUpNote: "Timing." })
     );
     expect(res.status).toBe(200);
-    expect(written().where).toEqual({ id: "sub_1" });
+    expect(written().where.id).toBe("sub_1");
     expect(written().data).toEqual({ followUpInterest: true, followUpNote: "Timing." });
   });
 
@@ -108,14 +113,49 @@ describe("POST /api/follow-up", () => {
     expect((await POST(post({}))).status).toBe(400);
     expect((await POST(post({ submissionId: "sub_1" }))).status).toBe(400);
     expect((await POST(post("not json"))).status).toBe(400);
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(updateManyMock).not.toHaveBeenCalled();
   });
 
-  it("404s on an id that does not exist, without throwing", async () => {
+  it("404s on an id that matches nothing, without throwing", async () => {
     const { POST } = await import("@/app/api/follow-up/route");
-    updateMock.mockRejectedValueOnce(new Error("Record to update not found."));
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
     const res = await POST(post({ submissionId: "nope", followUpInterest: true }));
     expect(res.status).toBe(404);
+  });
+
+  it("only writes rows young enough to still be answering", async () => {
+    // A cuid is the only thing authorising this write, and it is not a
+    // security token. The age bound is what stops a guessed or replayed id
+    // from being a permanent licence to rewrite someone's row.
+    const { POST } = await import("@/app/api/follow-up/route");
+    const before = Date.now();
+    await POST(post({ submissionId: "sub_1", followUpInterest: true }));
+    const after = Date.now();
+
+    const cutoff = written().where.createdAt.gt.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before - FOLLOW_UP_WRITE_WINDOW_MS);
+    expect(cutoff).toBeLessThanOrEqual(after - FOLLOW_UP_WRITE_WINDOW_MS + 5);
+  });
+
+  it("says 503, not 404, when the database is the thing that failed", async () => {
+    // These used to be indistinguishable, which hid an outage behind a status
+    // that tells the client not to bother retrying.
+    const { POST } = await import("@/app/api/follow-up/route");
+    updateManyMock.mockRejectedValueOnce(new Error("connection terminated"));
+    const res = await POST(post({ submissionId: "sub_1", followUpInterest: true }));
+    expect(res.status).toBe(503);
+  });
+
+  it("answers a missing row and an expired one identically", async () => {
+    // Different responses would confirm to an unauthenticated caller that a
+    // given id exists, which is the one thing the id is protecting.
+    const { POST } = await import("@/app/api/follow-up/route");
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+    const missing = await POST(post({ submissionId: "nope", followUpInterest: true }));
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+    const expired = await POST(post({ submissionId: "old", followUpInterest: true }));
+    expect(missing.status).toBe(expired.status);
+    expect(await missing.json()).toEqual(await expired.json());
   });
 
   it("throttles on its own bucket, not the submit one", async () => {

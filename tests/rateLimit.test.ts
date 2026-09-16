@@ -122,12 +122,45 @@ describe("clientIdentifier", () => {
     expect(a).not.toBe(b);
   });
 
-  it("uses only the first address when a proxy chain is present", () => {
-    const direct = clientIdentifier(new Headers({ "x-forwarded-for": "203.0.113.5" }));
+  it("takes the LAST hop of a chain, not the client-written first one", () => {
+    // Each proxy appends, so the first entry is whatever the caller typed and
+    // the last is the hop nearest us. Reading the first is how a throttle gets
+    // defeated by rotating a header.
+    const nearest = clientIdentifier(
+      new Headers({ "x-forwarded-for": "150.172.238.178" })
+    );
     const chained = clientIdentifier(
       new Headers({ "x-forwarded-for": "203.0.113.5, 70.41.3.18, 150.172.238.178" })
     );
-    expect(chained).toBe(direct);
+    expect(chained).toBe(nearest);
+  });
+
+  it("cannot be steered by a spoofed x-forwarded-for when the platform speaks", () => {
+    // The attack this exists to stop: send a different X-Forwarded-For on
+    // every request and get a fresh quota each time. Vercel overwrites
+    // x-vercel-forwarded-for, so it wins and the key stays put.
+    const real = "198.51.100.9";
+    const first = clientIdentifier(
+      new Headers({
+        "x-vercel-forwarded-for": real,
+        "x-forwarded-for": "1.1.1.1, " + real,
+      })
+    );
+    const second = clientIdentifier(
+      new Headers({
+        "x-vercel-forwarded-for": real,
+        "x-forwarded-for": "2.2.2.2, " + real,
+      })
+    );
+    expect(first).toBe(second);
+  });
+
+  it("prefers x-real-ip over anything the client could have written", () => {
+    const a = clientIdentifier(
+      new Headers({ "x-real-ip": "203.0.113.5", "x-forwarded-for": "9.9.9.9" })
+    );
+    const b = clientIdentifier(new Headers({ "x-real-ip": "203.0.113.5" }));
+    expect(a).toBe(b);
   });
 
   it("does not store the raw address", () => {

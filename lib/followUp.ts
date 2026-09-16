@@ -19,6 +19,19 @@ export const FOLLOW_UP_CONFIRMATION =
 // the textarea shows a counter as this is approached.
 export const MAX_FOLLOW_UP_NOTE_LENGTH = 1000;
 
+// What the endpoint will ACCEPT before rejecting outright, as opposed to what
+// it stores. Deliberately looser than the limit above, mirroring
+// MAX_COMMENT_PAYLOAD_LENGTH in lib/comments.ts: an over-long note is trimmed
+// to fit rather than failing the request, because the answer it arrives with
+// is the part staff act on and it must never be lost to a pasted essay. The
+// ceiling is only there so a scripted caller cannot post a megabyte.
+export const MAX_FOLLOW_UP_NOTE_PAYLOAD_LENGTH = MAX_FOLLOW_UP_NOTE_LENGTH * 4;
+
+// How long after a submission its follow-up answer may still be written.
+// The results page is open immediately after submitting, so this is generous
+// for the real flow while closing the window on anyone replaying an old id.
+export const FOLLOW_UP_WRITE_WINDOW_MS = 2 * 60 * 60 * 1000; // two hours
+
 export const FOLLOW_UP_NOTE_LABEL =
   "Anything you'd like us to know before the conversation?";
 

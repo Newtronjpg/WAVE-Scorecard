@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { LogoutButton } from "@/components/LogoutButton";
 import { NotifySettings } from "@/components/NotifySettings";
 import { DeleteSubmissionButton } from "@/components/DeleteSubmissionButton";
-import { ADMIN_COOKIE_NAME, matchAdminUser } from "@/lib/adminAuth";
+import { ADMIN_COOKIE_NAME } from "@/lib/adminAuth";
+import { verifySessionToken } from "@/lib/adminSession";
 import { getNotifyRecipientsRaw } from "@/lib/settings";
 import { commentCount } from "@/lib/comments";
 import { followUpLabel } from "@/lib/followUp";
@@ -13,12 +14,15 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const cookieStore = await cookies();
-  const passcode = cookieStore.get(ADMIN_COOKIE_NAME)?.value ?? "";
-  // proxy.ts already guarantees this request has a valid passcode before
-  // the page ever renders; re-resolving it here isn't re-checking access,
-  // it's just recovering WHICH staff member that passcode belongs to, so
-  // the page can say who's logged in.
-  const user = matchAdminUser(passcode);
+  // proxy.ts already guarantees this request carries a valid, unexpired
+  // session before the page ever renders; reading it here isn't re-checking
+  // access, it's just recovering WHICH staff member is logged in so the page
+  // can say so. The name comes from the signed payload, so it cannot be
+  // edited by whoever holds the cookie.
+  const session = await verifySessionToken(
+    cookieStore.get(ADMIN_COOKIE_NAME)?.value
+  );
+  const user = session ? { name: session.name } : null;
 
   const submissions = await db.submission.findMany({
     orderBy: { createdAt: "desc" },

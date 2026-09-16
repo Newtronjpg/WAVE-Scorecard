@@ -250,8 +250,15 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     // Defense in depth: the zod schema above should already have caught
     // any missing/out-of-range answer scoreAssessment would throw on.
+    //
+    // The detail is logged, not returned. This endpoint is public and
+    // unauthenticated, and an internal message naming question ids and
+    // scoring internals describes the shape of the system to anyone who
+    // posts malformed input at it. Staff can read the real reason in the
+    // logs; the caller gets what is useful to a caller.
+    console.error("Failed to score a submission:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not score assessment." },
+      { error: "Could not score assessment." },
       { status: 400 }
     );
   }

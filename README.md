@@ -149,3 +149,30 @@ tests/
   scoring.variable.test.ts   the same, at other choice counts
 prisma/schema.prisma        the six tables
 ```
+
+## Admin access and secrets
+
+Staff sign in at `/admin/login` with a passcode from `ADMIN_USERS`
+(`Name:passcode`, comma-separated). A successful login sets a **signed session
+token** valid for 12 hours; the passcode itself is never stored in the cookie
+and is verified exactly once, at login. Removing someone from `ADMIN_USERS`
+locks them out on their next request rather than when their session expires.
+
+**Hash the passcodes.** Plaintext entries still work so this can be done one
+person at a time, but a hashed entry means a leaked env var contains nothing
+that can be typed into the login box:
+
+```
+npx tsx scripts/hash-admin-passcode.ts 'Ben' 'their-passcode'
+```
+
+Paste the printed `Name:scrypt$...` into `ADMIN_USERS` and redeploy.
+
+`ADMIN_SESSION_SECRET` is optional. Unset, the signing key is derived from
+`ADMIN_USERS`, which means rotating any passcode also invalidates every live
+session. Set it explicitly if you want sessions to survive a passcode change.
+
+Note that the login throttle **fails closed**: if the database is unreachable,
+signing in is refused rather than left unthrottled. The public assessment's
+throttle fails open, on purpose — losing it costs junk rows, while wrongly
+blocking costs a real prospect their assessment.

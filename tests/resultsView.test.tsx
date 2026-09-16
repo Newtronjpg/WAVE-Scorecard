@@ -363,7 +363,9 @@ describe("the follow-up question on the results page", () => {
       target: { value: "Retry me." },
     });
     fireEvent.click(screen.getByRole("button", { name: /done/i }));
-    await waitFor(() => expect(screen.getByText(/try again/i)).toBeTruthy());
+    // Matched on the note's own message: the answer-level failure alert also
+    // offers a "Try again", so a bare /try again/ now finds two things.
+    await waitFor(() => expect(screen.getByText(/didn't send/i)).toBeTruthy());
 
     const before = followUpCalls(fetchMock).length;
     fireEvent.click(screen.getByRole("button", { name: /done/i }));
@@ -380,5 +382,64 @@ describe("the follow-up question on the results page", () => {
     fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
     expect(printButton().disabled).toBe(false);
     expect(screen.getByRole("button", { name: /done/i })).toBeTruthy();
+  });
+  it("does not claim Saved when blur and Done race, and the write failed", async () => {
+    // REGRESSION. Clicking Done blurs the textarea first in every real
+    // browser, so blur and click fire with identical payloads microseconds
+    // apart -- the normal path, not an edge case. The optimistic cache used
+    // to make the click resolve true off the blur's still-in-flight request,
+    // so a failed write displayed "Saved": the exact lie this button exists
+    // to prevent. Reproduced before the fix; it showed "Saved".
+    await atResults({ followUpOk: false });
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    const box = screen.getByLabelText(FOLLOW_UP_NOTE_LABEL);
+    fireEvent.change(box, { target: { value: "Important context." } });
+
+    fireEvent.blur(box);
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+
+    await waitFor(() => expect(screen.getByText(/didn't send/i)).toBeTruthy());
+    expect(screen.queryByText(/^Saved/i)).toBeNull();
+  });
+
+  it("shares one request when blur and Done race and it succeeds", async () => {
+    // The other half: deduplicated, not merely correct. Two identical writes
+    // for one click would be waste, and would spend the endpoint's throttle.
+    const fetchMock = await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    const box = screen.getByLabelText(FOLLOW_UP_NOTE_LABEL);
+    fireEvent.change(box, { target: { value: "One write only." } });
+
+    fireEvent.blur(box);
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+
+    await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy());
+    const withNote = followUpCalls(fetchMock).filter(
+      (c) => c.followUpNote === "One write only."
+    );
+    expect(withNote).toHaveLength(1);
+  });
+
+  it("tells them when the answer itself could not be recorded", async () => {
+    // This used to be entirely silent: print unlocks on local state, so
+    // someone could answer yes, have the write fail, print, and leave with
+    // nobody knowing the lead was lost.
+    await atResults({ followUpOk: false });
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn.t record that answer/i
+      )
+    );
+    // Still not a blocker -- their results are correct and printable.
+    expect(printButton().disabled).toBe(false);
+  });
+
+  it("stays quiet when the answer lands", async () => {
+    await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    await waitFor(() => expect(printButton().disabled).toBe(false));
+    expect(screen.queryByText(/couldn.t record that answer/i)).toBeNull();
   });
 });

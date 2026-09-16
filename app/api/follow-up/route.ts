@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { MAX_FOLLOW_UP_NOTE_LENGTH, normalizeFollowUpNote } from "@/lib/followUp";
+import {
+  FOLLOW_UP_WRITE_WINDOW_MS,
+  MAX_FOLLOW_UP_NOTE_PAYLOAD_LENGTH,
+  normalizeFollowUpNote,
+} from "@/lib/followUp";
 import { checkRateLimit, clientIdentifier } from "@/lib/rateLimit";
 
 // Records whether a respondent wants a conversation, and what they would like
@@ -36,7 +40,11 @@ const followUpSchema = z.object({
   // Permissive on purpose -- trimmed, truncated and emptied-to-null by
   // normalizeFollowUpNote rather than rejected. A note must never be able to
   // fail the write that carries the answer staff actually care about.
-  followUpNote: z.string().max(MAX_FOLLOW_UP_NOTE_LENGTH * 4).nullable().optional(),
+  followUpNote: z
+    .string()
+    .max(MAX_FOLLOW_UP_NOTE_PAYLOAD_LENGTH)
+    .nullable()
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -78,18 +86,42 @@ export async function POST(req: NextRequest) {
     followUpInterest === true ? normalizeFollowUpNote(parsed.data.followUpNote) : null;
 
   try {
-    await db.submission.update({
-      where: { id: submissionId },
+    // updateMany, not update, because the guard belongs in the WHERE clause.
+    //
+    // Knowing a submission id is the ONLY thing authorising this write -- the
+    // endpoint is public, and it has to be, because the person answering has
+    // no account. A cuid is not a security token (Prisma's cuid v1 is a
+    // timestamp, a counter, a stable host fingerprint and a short random
+    // block), so the id alone should not grant an unlimited, permanent right
+    // to rewrite a row. The age check bounds that: the results page is open
+    // immediately after submitting, so a legitimate answer always lands well
+    // inside the window, while a replayed or guessed id from any earlier
+    // session is simply not writable.
+    const { count } = await db.submission.updateMany({
+      where: {
+        id: submissionId,
+        createdAt: { gt: new Date(Date.now() - FOLLOW_UP_WRITE_WINDOW_MS) },
+      },
       data: { followUpInterest, followUpNote },
-      select: { id: true },
     });
+
+    if (count === 0) {
+      // No row, or one too old to still be accepting an answer. Genuinely the
+      // caller's problem and not ours, so 404 -- and deliberately the same
+      // response for both, since telling an unauthenticated caller which of
+      // the two it was would confirm that an id exists.
+      return NextResponse.json({ error: "Could not record that." }, { status: 404 });
+    }
   } catch (e) {
-    // The overwhelmingly likely cause is an id that does not exist -- a stale
-    // tab, or someone poking at the endpoint. Either way there is nothing to
-    // tell the respondent: their results are already on screen and correct,
-    // and this answer is not worth an error banner over the top of them.
+    // Reached only when the database itself failed. This used to return 404
+    // as well, which made an outage indistinguishable from a bad id in both
+    // the logs and the client -- and told the client not to bother retrying
+    // something that was in fact worth retrying.
     console.error("Failed to record follow-up answer:", e);
-    return NextResponse.json({ error: "Could not record that." }, { status: 404 });
+    return NextResponse.json(
+      { error: "We couldn't record that just now." },
+      { status: 503 }
+    );
   }
 
   return NextResponse.json({ recorded: true });

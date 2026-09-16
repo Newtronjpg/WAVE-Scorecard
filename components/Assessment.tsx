@@ -47,6 +47,11 @@ type ScoreResultShape = {
 
 type View = "intro" | "section" | "submitting" | "results";
 
+// How long a follow-up write may take before it is treated as failed. Short:
+// the request is two columns on a row that already exists, and the person is
+// standing at the print button waiting to be told whether it saved.
+const FOLLOW_UP_TIMEOUT_MS = 10_000;
+
 // Questions arrive as a prop, resolved server-side, so admin edits show up
 // without a redeploy. `version` is the published version that produced
 // this exact `questions` array, carried through submit untouched so a
@@ -86,15 +91,25 @@ export function Assessment({
   // Offered only alongside a yes: what they would like the conversation to
   // cover. Always optional.
   const [followUpNote, setFollowUpNote] = useState("");
-  // What the server was last told, so blurring an untouched box, or answering
-  // the same way twice, does not spend a write.
-  const lastRecorded = useRef<string | null>(null);
+  // What the server has CONFIRMED, so blurring an untouched box, or answering
+  // the same way twice, does not spend a write. Only ever set after a 2xx.
+  const lastConfirmed = useRef<string | null>(null);
+  // The request currently in the air, so two callers with the same payload
+  // share one result instead of the second assuming the first succeeded.
+  const inFlight = useRef<{ payload: string; promise: Promise<boolean> } | null>(
+    null
+  );
   // Whether the note has been explicitly saved, and shown as such. Idle is not
   // "unsaved" -- blur still writes -- it only means nothing has been confirmed
   // on screen yet.
   const [noteStatus, setNoteStatus] = useState<
     "idle" | "saving" | "saved" | "failed"
   >("idle");
+  // The answer itself failing to reach the server used to be completely
+  // silent: the print button unlocks on local state, so someone could answer
+  // yes, have the write fail, print, and leave -- with nobody, them or F&W,
+  // ever knowing the lead was lost. This is what makes that visible.
+  const [interestFailed, setInterestFailed] = useState(false);
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -174,10 +189,21 @@ export function Assessment({
   const submissionId = result?.submissionId ?? null;
 
   /**
-   * Sends the answer to /api/follow-up. Deliberately fire-and-forget: their
-   * results are already on screen and correct, and a failed write here is not
-   * worth an error banner over the top of them. It is skipped entirely when
-   * the value has not changed since the last successful send.
+   * Sends the answer to /api/follow-up and reports whether it landed.
+   *
+   * Two things here are load-bearing rather than incidental:
+   *
+   * A payload already CONFIRMED on the server short-circuits to true, but a
+   * payload merely IN FLIGHT returns that same in-flight promise instead of
+   * assuming it will succeed. Clicking Done blurs the textarea first in every
+   * real browser, so blur and click fire with identical payloads microseconds
+   * apart -- the normal path, not an edge case. Caching optimistically meant
+   * the click resolved true off the blur's not-yet-finished request, and a
+   * failed write then displayed "Saved". That is the exact lie this button
+   * exists to prevent.
+   *
+   * Nothing is marked confirmed until a 2xx comes back, so a failure leaves
+   * the value retryable rather than stranded behind a cache entry.
    */
   async function recordFollowUp(
     interest: boolean | null,
@@ -196,34 +222,58 @@ export function Assessment({
       // "has this actually changed" check below would send a pointless write.
       followUpNote: interest === true && note.trim() ? note.trim() : null,
     });
-    // Already stored. Reported as success because it is one -- the value the
-    // caller is asking about is on the server.
-    if (payload === lastRecorded.current) return true;
-    lastRecorded.current = payload;
-    try {
-      const res = await fetch("/api/follow-up", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-        // The tab can be closing on the way to the printer; this asks the
-        // browser to finish the request anyway.
-        keepalive: true,
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      return true;
-    } catch {
-      // Let the next attempt retry rather than stranding the value.
-      lastRecorded.current = null;
-      return false;
-    }
+
+    if (payload === lastConfirmed.current) return true;
+    if (inFlight.current?.payload === payload) return inFlight.current.promise;
+
+    const promise = (async () => {
+      // Bounded, because the Done button disables itself while a save is in
+      // the air. Without this a request that never settles leaves "Saving..."
+      // on screen and the button dead for as long as the page is open.
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), FOLLOW_UP_TIMEOUT_MS);
+      try {
+        const res = await fetch("/api/follow-up", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          // The tab can be closing on the way to the printer; this asks the
+          // browser to finish the request anyway.
+          keepalive: true,
+          signal: abort.signal,
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        lastConfirmed.current = payload;
+        return true;
+      } catch {
+        return false;
+      } finally {
+        clearTimeout(timer);
+        if (inFlight.current?.payload === payload) inFlight.current = null;
+      }
+    })();
+
+    inFlight.current = { payload, promise };
+    return promise;
   }
 
-  function handleFollowUpChange(value: boolean | null) {
+  async function handleFollowUpChange(value: boolean | null) {
     setFollowUpInterest(value);
     if (value !== true) setFollowUpNote("");
     // A stale "Saved" under a box they just re-opened would be a lie.
     setNoteStatus("idle");
-    void recordFollowUp(value, value === true ? followUpNote : "");
+    setInterestFailed(false);
+
+    const ok = await recordFollowUp(value, value === true ? followUpNote : "");
+    // One silent retry before saying anything: the common failure here is a
+    // single dropped request, and a warning that resolves itself is noise.
+    if (!ok && value !== null) {
+      const retried = await recordFollowUp(
+        value,
+        value === true ? followUpNote : ""
+      );
+      setInterestFailed(!retried);
+    }
   }
 
   // The note saves on blur too, but silently, which is the same as not saving
@@ -262,8 +312,10 @@ export function Assessment({
     setComments({});
     setFollowUpInterest(null);
     setFollowUpNote("");
-    lastRecorded.current = null;
+    lastConfirmed.current = null;
+    inFlight.current = null;
     setNoteStatus("idle");
+    setInterestFailed(false);
     // Name, company, email, and industry deliberately persist: "Start
     // over" retakes the assessment, it does not become a different
     // person, and re-typing all four is pure friction.
@@ -440,6 +492,26 @@ export function Assessment({
             value={followUpInterest}
             onChange={handleFollowUpChange}
           />
+
+          {interestFailed && (
+            // Deliberately not a blocker -- their results are correct and
+            // printable either way -- but it must not be silent, because the
+            // whole point of the question is that somebody acts on it.
+            <div
+              role="alert"
+              className="mt-3 rounded-md border border-maroon bg-[var(--color-tint)] px-4 py-3 text-sm text-ink"
+            >
+              We couldn&rsquo;t record that answer.{" "}
+              <button
+                type="button"
+                onClick={() => handleFollowUpChange(followUpInterest)}
+                className="underline font-medium cursor-pointer"
+              >
+                Try again
+              </button>
+              , or mention it when you speak to us.
+            </div>
+          )}
 
           {/* Only alongside a yes. Asking someone who just declined what they
               would like to discuss reads as not having listened. */}
