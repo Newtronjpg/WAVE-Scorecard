@@ -170,12 +170,17 @@ describe("results view", () => {
 // the only way the answer reaches anybody.
 describe("the follow-up question on the results page", () => {
   /** Completes an assessment and hands back the fetch mock, submit included. */
-  async function atResults(opts: { submissionId?: string | null } = {}) {
+  async function atResults(
+    opts: { submissionId?: string | null; followUpOk?: boolean } = {}
+  ) {
     const answers: Record<string, number> = {};
     for (const q of V13) answers[q.id] = 3;
     const score = scoreAssessment(answers, V13);
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
+    // Routed, so a failing /api/follow-up can be tested without also breaking
+    // the submit that has to succeed first.
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: url === "/api/follow-up" ? opts.followUpOk !== false : true,
+      status: url === "/api/follow-up" && opts.followUpOk === false ? 500 : 200,
       json: async () => ({
         ...score,
         saved: true,
@@ -302,5 +307,78 @@ describe("the follow-up question on the results page", () => {
     }
     expect(screen.queryByText(FOLLOW_UP_QUESTION)).toBeNull();
     expect(screen.getByRole("button", { name: /see my results/i })).toBeTruthy();
+  });
+  it("gives the note a Done button, and says so when it lands", async () => {
+    // Blur alone saved it, but silently, and a save nobody can see is the same
+    // as no save. Noah's note: there has to be something to press.
+    const fetchMock = await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    fireEvent.change(screen.getByLabelText(FOLLOW_UP_NOTE_LABEL), {
+      target: { value: "We are three years out from selling." },
+    });
+
+    expect(screen.queryByText(/saved/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+
+    await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy());
+    expect(followUpCalls(fetchMock).at(-1).followUpNote).toBe(
+      "We are three years out from selling."
+    );
+  });
+
+  it("drops the confirmation as soon as the text changes again", async () => {
+    // "Saved" has to belong to the words on screen, not to whatever was there
+    // a moment ago.
+    await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    const box = screen.getByLabelText(FOLLOW_UP_NOTE_LABEL);
+    fireEvent.change(box, { target: { value: "First thought." } });
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+    await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy());
+
+    fireEvent.change(box, { target: { value: "First thought, expanded." } });
+    expect(screen.queryByText(/saved/i)).toBeNull();
+  });
+
+  it("admits it when the note does not send", async () => {
+    // Showing "Saved" over a failed write would be the worst outcome here:
+    // they would leave believing F&W had context that nobody has.
+    await atResults({ followUpOk: false });
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    fireEvent.change(screen.getByLabelText(FOLLOW_UP_NOTE_LABEL), {
+      target: { value: "Something worth knowing." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/didn't send. please try again/i)).toBeTruthy()
+    );
+    expect(screen.queryByText(/saved/i)).toBeNull();
+  });
+
+  it("lets a failed note be retried rather than stranding it", async () => {
+    const fetchMock = await atResults({ followUpOk: false });
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    fireEvent.change(screen.getByLabelText(FOLLOW_UP_NOTE_LABEL), {
+      target: { value: "Retry me." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+    await waitFor(() => expect(screen.getByText(/try again/i)).toBeTruthy());
+
+    const before = followUpCalls(fetchMock).length;
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+    // The identical payload must go again, not be skipped as "unchanged".
+    await waitFor(() =>
+      expect(followUpCalls(fetchMock).length).toBeGreaterThan(before)
+    );
+  });
+
+  it("never gates the printout behind the note", async () => {
+    // The lock belongs to the question, which is answered. The note is
+    // optional and must stay that way.
+    await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
+    expect(printButton().disabled).toBe(false);
+    expect(screen.getByRole("button", { name: /done/i })).toBeTruthy();
   });
 });

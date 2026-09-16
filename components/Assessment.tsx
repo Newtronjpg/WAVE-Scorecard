@@ -89,6 +89,12 @@ export function Assessment({
   // What the server was last told, so blurring an untouched box, or answering
   // the same way twice, does not spend a write.
   const lastRecorded = useRef<string | null>(null);
+  // Whether the note has been explicitly saved, and shown as such. Idle is not
+  // "unsaved" -- blur still writes -- it only means nothing has been confirmed
+  // on screen yet.
+  const [noteStatus, setNoteStatus] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
   const [result, setResult] = useState<ScoreResultShape | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,8 +179,11 @@ export function Assessment({
    * worth an error banner over the top of them. It is skipped entirely when
    * the value has not changed since the last successful send.
    */
-  function recordFollowUp(interest: boolean | null, note: string) {
-    if (!submissionId) return;
+  async function recordFollowUp(
+    interest: boolean | null,
+    note: string
+  ): Promise<boolean> {
+    if (!submissionId) return false;
     const payload = JSON.stringify({
       submissionId,
       followUpInterest: interest,
@@ -187,31 +196,48 @@ export function Assessment({
       // "has this actually changed" check below would send a pointless write.
       followUpNote: interest === true && note.trim() ? note.trim() : null,
     });
-    if (payload === lastRecorded.current) return;
+    // Already stored. Reported as success because it is one -- the value the
+    // caller is asking about is on the server.
+    if (payload === lastRecorded.current) return true;
     lastRecorded.current = payload;
-    void fetch("/api/follow-up", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-      // The tab can be closing on the way to the printer; this asks the
-      // browser to finish the request anyway.
-      keepalive: true,
-    }).catch(() => {
-      // Let the next change retry rather than stranding the value.
+    try {
+      const res = await fetch("/api/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        // The tab can be closing on the way to the printer; this asks the
+        // browser to finish the request anyway.
+        keepalive: true,
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      return true;
+    } catch {
+      // Let the next attempt retry rather than stranding the value.
       lastRecorded.current = null;
-    });
+      return false;
+    }
   }
 
   function handleFollowUpChange(value: boolean | null) {
     setFollowUpInterest(value);
     if (value !== true) setFollowUpNote("");
-    recordFollowUp(value, value === true ? followUpNote : "");
+    // A stale "Saved" under a box they just re-opened would be a lie.
+    setNoteStatus("idle");
+    void recordFollowUp(value, value === true ? followUpNote : "");
+  }
+
+  // The note saves on blur too, but silently, which is the same as not saving
+  // as far as anyone can tell. This is the button that says so out loud.
+  async function handleNoteDone() {
+    setNoteStatus("saving");
+    const ok = await recordFollowUp(followUpInterest, followUpNote);
+    setNoteStatus(ok ? "saved" : "failed");
   }
 
   function handlePrint() {
     // Flushes a note they typed and never blurred -- clicking the button does
     // blur the textarea, but not before this handler runs in every browser.
-    recordFollowUp(followUpInterest, followUpNote);
+    void recordFollowUp(followUpInterest, followUpNote);
     window.print();
   }
 
@@ -237,6 +263,7 @@ export function Assessment({
     setFollowUpInterest(null);
     setFollowUpNote("");
     lastRecorded.current = null;
+    setNoteStatus("idle");
     // Name, company, email, and industry deliberately persist: "Start
     // over" retakes the assessment, it does not become a different
     // person, and re-typing all four is pure friction.
@@ -432,13 +459,45 @@ export function Assessment({
                 rows={4}
                 maxLength={MAX_FOLLOW_UP_NOTE_LENGTH}
                 value={followUpNote}
-                onChange={(e) => setFollowUpNote(e.target.value)}
-                // Written on blur rather than on every keystroke: this is one
-                // paragraph, not a document, and a write per character would
-                // burn the endpoint's throttle on a single sentence.
-                onBlur={() => recordFollowUp(followUpInterest, followUpNote)}
+                onChange={(e) => {
+                  setFollowUpNote(e.target.value);
+                  // The confirmation belongs to the text that earned it.
+                  setNoteStatus("idle");
+                }}
+                // Written on blur as well as by the button: blur is the safety
+                // net for someone who types and then clicks straight to print,
+                // and it is per-blur rather than per-keystroke so one sentence
+                // cannot burn the endpoint's throttle.
+                onBlur={() => void recordFollowUp(followUpInterest, followUpNote)}
                 className="mt-3 block w-full rounded-md border border-line bg-paper-raised px-3 py-2 text-sm text-ink leading-relaxed focus:border-maroon focus:outline-none"
               />
+
+              {/* Saving on blur alone left nothing on screen to say it had
+                  happened, which reads exactly like not saving at all. The
+                  button does not gate anything -- the note is still optional
+                  and print is already unlocked by the answer above -- it
+                  exists so there is somewhere to put "Saved". */}
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleNoteDone}
+                  disabled={noteStatus === "saving"}
+                  className="rounded-md border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-paper-raised disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {noteStatus === "saving" ? "Saving..." : "Done"}
+                </button>
+                <span
+                  aria-live="polite"
+                  className={[
+                    "text-sm",
+                    noteStatus === "failed" ? "text-maroon" : "text-ink-muted",
+                  ].join(" ")}
+                >
+                  {noteStatus === "saved" && "Saved \u2014 thank you."}
+                  {noteStatus === "failed" &&
+                    "That didn't send. Please try again."}
+                </span>
+              </div>
             </div>
           )}
         </div>
