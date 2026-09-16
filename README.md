@@ -163,8 +163,11 @@ person at a time, but a hashed entry means a leaked env var contains nothing
 that can be typed into the login box:
 
 ```
-npx tsx scripts/hash-admin-passcode.ts 'Ben' 'their-passcode'
+npx tsx scripts/hash-admin-passcode.ts 'Ben'
 ```
+
+It asks for the passcode twice and does not echo it, so the secret never
+reaches shell history or the process list.
 
 Paste the printed `Name:scrypt$...` into `ADMIN_USERS` and redeploy.
 
