@@ -10,8 +10,7 @@ import { BAND_COLORS, clampScore, needleAngleFor } from "@/lib/gauge";
 //
 // Deliberately carries no numeric readout.
 //
-// Three things about the composition, all of them fixes to how the first
-// version actually rendered rather than preferences:
+// Two things about the composition:
 //
 //   The dial states its own band, under the hub. A 180-degree gauge is a
 //   half-disc with an empty lower half, and the band word was previously a
@@ -20,27 +19,33 @@ import { BAND_COLORS, clampScore, needleAngleFor } from "@/lib/gauge";
 //   already was fixes both, and the needle never sweeps below the hub, so
 //   nothing can collide with it.
 //
-//   The needle is a slim taper, not a wedge. At the size this renders, a
-//   9-unit base plus a 6-unit hub merged into one black blob heavy enough to
-//   be the first thing the eye landed on -- ahead of the colour and the word.
+//   The needle is a bare taper with no hub at all. There was a solid pivot
+//   circle here; it rendered inconsistently across screen, print and PDF, and
+//   the fix that matters more than how it looked is that the dial now draws
+//   the same way every time. The needle's own base is 5.2 units across and
+//   passes through the pivot, so the rotation still reads as a rotation
+//   without anything drawn at the centre to do it.
 //
-//   Segments are capped round and separated by a wider gap, which reads as
-//   four steps on a scale rather than one poured gradient.
+// The arc segments are deliberately UNCHANGED from the original: butt caps,
+// a 15-unit track, a hairline gap and all four bands at full strength. A
+// round-capped, thinner, dimmed-when-inactive variant was tried and reverted
+// -- the scale is meant to read as a fixed scale, identical on every result,
+// with only the needle and the word moving.
 
 const CENTER_X = 100;
 const CENTER_Y = 100;
 const RADIUS = 80;
-const TRACK_WIDTH = 12;
+const TRACK_WIDTH = 15;
 
-// Band labels sit just outside the track. Inside it they clip: near the ends
-// of the arc the band runs nearly vertical, so a horizontal word overflows the
-// track's thickness and the overflow lands on the paper background.
-const LABEL_RADIUS = RADIUS + 15;
+// Band labels sit just outside the track rather than on it. Inside the track
+// they clip: near the ends of the arc the band runs nearly vertical, so a
+// horizontal word overflows its 15 units of thickness and the overflow lands
+// on the paper background, where white text vanishes.
+const LABEL_RADIUS = RADIUS + 17;
 
-// Degrees dropped between segments so the colour boundaries read as four
-// distinct bands. Wider than it needs to be for separation alone -- at this
-// scale a hairline gap disappears and the arc looks continuous again.
-const SEGMENT_GAP = 2.4;
+// Degrees of arc dropped between segments so the color boundaries read as
+// four distinct bands rather than one continuous gradient.
+const SEGMENT_GAP = 1.6;
 
 // Angles use the needle's convention: -90 is the left end of the arc, 0 is
 // straight up, +90 is the right end.
@@ -100,11 +105,15 @@ export function ScoreGauge({
 
   return (
     <svg
-      viewBox="-26 4 252 134"
+      // Wider than the arc needs, on purpose. The outer two labels are
+      // anchored outward from the widest part of the dial, and the active one
+      // is bold, so "Great" at 700 weight runs past x=220 and the old box
+      // clipped its last letter on exactly the results that scored best.
+      viewBox="-22 0 250 142"
       // Scales fluidly with whatever column it sits in and stays centred. The
       // cap stops the dial from dominating the page on wide viewports; the
       // viewBox aspect ratio handles the height on its own.
-      className="block w-full max-w-[400px] h-auto mx-auto"
+      className="block w-full max-w-[420px] h-auto mx-auto"
       role="img"
       aria-label={`${label}: ${activeBand.label}`}
     >
@@ -116,37 +125,33 @@ export function ScoreGauge({
             fill="none"
             stroke={seg.color}
             strokeWidth={TRACK_WIDTH}
-            strokeLinecap="round"
-            // The band the score landed in carries full weight; the other
-            // three stay legible but recede, so the eye finds the answer
-            // before it reads the scale.
-            opacity={seg.label === activeBand.label ? 1 : 0.32}
+            strokeLinecap="butt"
           />
         ))}
 
-        {SEGMENTS.map((seg) => (
-          <text
-            key={seg.label}
-            x={seg.labelPos.x}
-            y={seg.labelPos.y}
-            textAnchor={seg.anchor}
-            dominantBaseline="central"
-            // Uniformly quiet. The active band is already carried by the
-            // full-strength segment, the needle and the word under the hub;
-            // a fourth emphasis here just made the same point again.
-            fill="var(--color-ink-muted)"
-            fontSize="9.5"
-            fontWeight={500}
-            style={{ fontFamily: "var(--font-sans)", letterSpacing: "0.08em" }}
-          >
-            {seg.label.toUpperCase()}
-          </text>
-        ))}
+        {SEGMENTS.map((seg) => {
+          const isActive = seg.label === activeBand.label;
+          return (
+            <text
+              key={seg.label}
+              x={seg.labelPos.x}
+              y={seg.labelPos.y}
+              textAnchor={seg.anchor}
+              dominantBaseline="central"
+              fill={isActive ? seg.color : "var(--color-ink-muted)"}
+              fontSize="11"
+              fontWeight={isActive ? 700 : 500}
+              style={{ fontFamily: "var(--font-sans)", letterSpacing: "0.03em" }}
+            >
+              {seg.label}
+            </text>
+          );
+        })}
 
-        {/* The needle rotates about the hub. Its transition is intentionally
-            the only motion here, and the global prefers-reduced-motion rule in
-            app/globals.css cancels it with !important for anyone who has asked
-            for less movement. */}
+        {/* The needle rotates about the centre point. Its transition is
+            intentionally the only motion here, and the global
+            prefers-reduced-motion rule in app/globals.css cancels it with
+            !important for anyone who has asked for less movement. */}
         <g
           style={{
             transform: `rotate(${angle}deg)`,
@@ -159,7 +164,8 @@ export function ScoreGauge({
             fill="var(--color-ink)"
           />
         </g>
-        <circle cx={CENTER_X} cy={CENTER_Y} r="4" fill="var(--color-ink)" />
+        {/* No pivot circle. The needle's base is its own hub -- see the note
+            at the top of this file. */}
 
         {/* The reading, in the empty half the dial leaves behind. */}
         <text

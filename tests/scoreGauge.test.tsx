@@ -27,16 +27,26 @@ function needleAngle(svg: SVGElement): number {
 }
 
 describe("ScoreGauge", () => {
-  it("states the band in the dial, once", () => {
+  it("states the band under the needle, in that band's colour", () => {
     const svg = gauge(62);
     const band = bandFor(62).label;
-    // The scale labels around the arc are upper-cased, so an exact match on
-    // the band's own casing finds the reading under the hub and nothing else.
+    // The word appears twice: once as the scale label on the arc, once as the
+    // reading. The reading is the one below the pivot -- the arc, and every
+    // label on it, sits above CENTER_Y.
     const reading = [...svg.querySelectorAll("text")].find(
-      (t) => t.textContent === band
+      (t) => t.textContent === band && Number(t.getAttribute("y")) > 100
     );
-    expect(reading, `no "${band}" reading in the dial`).toBeTruthy();
-    expect(reading!.getAttribute("fill")).toBe(BAND_COLORS[READINESS_BANDS.indexOf(bandFor(62))]);
+    expect(reading, `no "${band}" reading under the needle`).toBeTruthy();
+    expect(reading!.getAttribute("fill")).toBe(
+      BAND_COLORS[READINESS_BANDS.indexOf(bandFor(62))]
+    );
+  });
+
+  it("draws no hub, so the dial is identical on screen, print and PDF", () => {
+    // The pivot circle rendered inconsistently across those three. It is not
+    // coming back, and this is the assertion that says so -- the needle's own
+    // base passes through the pivot and does the job.
+    expect(gauge(62).querySelectorAll("circle")).toHaveLength(0);
   });
 
   it("keeps the number out of the accessible label too", () => {
@@ -48,14 +58,30 @@ describe("ScoreGauge", () => {
     expect(label).not.toMatch(/\d/);
   });
 
-  it("dims every band except the one scored", () => {
-    const paths = [...gauge(88).querySelectorAll("path")];
-    const opacities = paths.map((p) => Number(p.getAttribute("opacity")));
-    expect(opacities.filter((o) => o === 1)).toHaveLength(1);
-    expect(opacities.filter((o) => o < 1)).toHaveLength(READINESS_BANDS.length - 1);
-    // The full-strength arc is the band the score landed in -- fourth of four
-    // at 88, so last in document order.
-    expect(paths[READINESS_BANDS.indexOf(bandFor(88))].getAttribute("opacity")).toBe("1");
+  it("draws the scale identically whatever the score", () => {
+    // The arc is a fixed scale, not a readout: same four bands, same weight,
+    // same caps, every time. A variant that thinned the track, rounded the
+    // caps and faded the three inactive bands was tried and reverted, so this
+    // pins the four properties that changed.
+    const shape = (score: number) =>
+      [...gauge(score).querySelectorAll("path")].map((p) => ({
+        stroke: p.getAttribute("stroke"),
+        width: p.getAttribute("stroke-width"),
+        cap: p.getAttribute("stroke-linecap"),
+        opacity: p.getAttribute("opacity"),
+      }));
+
+    const low = shape(12);
+    cleanup();
+    const high = shape(88);
+    expect(low).toEqual(high);
+    expect(low).toHaveLength(READINESS_BANDS.length);
+    for (const seg of low) {
+      expect(seg.cap).toBe("butt");
+      expect(seg.width).toBe("15");
+      // No dimming: absent, not "1" -- nothing should be setting it at all.
+      expect(seg.opacity).toBeNull();
+    }
   });
 
   it("moves the needle within a band, not just between them", () => {
