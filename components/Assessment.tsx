@@ -220,20 +220,15 @@ export function Assessment({
         )}
 
         <div className="mt-6 flex flex-col items-center">
-          <ScoreGauge score={result.overallScore} />
           {/* The number is deliberately absent: Ben's call is that "47/100"
               reads as a grade and puts owners on the defensive, while the
               needle plus the word carries the same information without the
               scolding. The score still drives the needle and still travels to
-              the admin export -- it is only hidden from the owner. */}
-          <div className="mt-2 rounded-2xl bg-[var(--color-tint)] px-5 py-2 text-center">
-            <span
-              className="block font-display text-2xl leading-none"
-              style={{ color: bandColorFor(result.overallScore) }}
-            >
-              {result.band.label}
-            </span>
-          </div>
+              the admin export -- it is only hidden from the owner.
+              The band word lives inside the dial now, in the empty half a
+              180-degree gauge leaves under its hub, rather than in a pill
+              below it that repeated the word an inch away. */}
+          <ScoreGauge score={result.overallScore} />
         </div>
         <p className="mt-3 mx-auto max-w-md text-center text-sm text-ink-muted leading-relaxed">
           {result.band.description}

@@ -3,33 +3,47 @@ import { BAND_COLORS, clampScore, needleAngleFor } from "@/lib/gauge";
 
 // A 180-degree four-band speedometer for the overall readiness score.
 //
-// The needle angle is continuous, not snapped to the band it lands in, so
-// two scores inside the same band still read differently -- 74 sits
-// visibly right of 65 even though both are "Good". That's the entire
-// reason this replaced the numeral: a band label alone flattens a
-// 25-point range into one word.
+// The needle angle is continuous, not snapped to the band it lands in, so two
+// scores inside the same band still read differently -- 74 sits visibly right
+// of 65 even though both are "Good". That is the entire reason this replaced
+// the numeral: a band label alone flattens a 25-point range into one word.
 //
-// Deliberately carries no numeric readout. The score is still stated in
-// the narrative paragraph below it on the results page; repeating it in
-// the dial would put the number back in the place it was removed from.
+// Deliberately carries no numeric readout.
+//
+// Three things about the composition, all of them fixes to how the first
+// version actually rendered rather than preferences:
+//
+//   The dial states its own band, under the hub. A 180-degree gauge is a
+//   half-disc with an empty lower half, and the band word was previously a
+//   separate pill sitting below the whole SVG -- which left that space empty
+//   AND said "Good" twice within an inch. Putting the word where the space
+//   already was fixes both, and the needle never sweeps below the hub, so
+//   nothing can collide with it.
+//
+//   The needle is a slim taper, not a wedge. At the size this renders, a
+//   9-unit base plus a 6-unit hub merged into one black blob heavy enough to
+//   be the first thing the eye landed on -- ahead of the colour and the word.
+//
+//   Segments are capped round and separated by a wider gap, which reads as
+//   four steps on a scale rather than one poured gradient.
 
 const CENTER_X = 100;
 const CENTER_Y = 100;
 const RADIUS = 80;
-const TRACK_WIDTH = 15;
+const TRACK_WIDTH = 12;
 
-// Band labels sit just outside the track rather than on it. Inside the
-// track they clip: near the ends of the arc the band runs nearly
-// vertical, so a horizontal word overflows its 15 units of thickness and
-// the overflow lands on the paper background, where white text vanishes.
-const LABEL_RADIUS = RADIUS + 17;
+// Band labels sit just outside the track. Inside it they clip: near the ends
+// of the arc the band runs nearly vertical, so a horizontal word overflows the
+// track's thickness and the overflow lands on the paper background.
+const LABEL_RADIUS = RADIUS + 15;
 
-// Degrees of arc dropped between segments so the color boundaries read as
-// four distinct bands rather than one continuous gradient.
-const SEGMENT_GAP = 1.6;
+// Degrees dropped between segments so the colour boundaries read as four
+// distinct bands. Wider than it needs to be for separation alone -- at this
+// scale a hairline gap disappears and the arc looks continuous again.
+const SEGMENT_GAP = 2.4;
 
-// Angles use the needle's convention: -90 is the left end of the arc,
-// 0 is straight up, +90 is the right end.
+// Angles use the needle's convention: -90 is the left end of the arc, 0 is
+// straight up, +90 is the right end.
 function polar(angleDeg: number, radius: number) {
   const rad = (angleDeg * Math.PI) / 180;
   return {
@@ -41,8 +55,8 @@ function polar(angleDeg: number, radius: number) {
 function arcPath(startAngle: number, endAngle: number, radius: number) {
   const start = polar(startAngle, radius);
   const end = polar(endAngle, radius);
-  // Every segment is 45 degrees, so large-arc is always 0. Sweep is 1
-  // because left-to-right over the top is clockwise in SVG's y-down space.
+  // Every segment is 45 degrees, so large-arc is always 0. Sweep is 1 because
+  // left-to-right over the top is clockwise in SVG's y-down space.
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 0 1 ${end.x} ${end.y}`;
 }
 
@@ -55,19 +69,22 @@ const SEGMENTS = READINESS_BANDS.map((band, i) => {
   return {
     label: band.label,
     color: BAND_COLORS[i],
-    // The gap is inset on both sides so the four segments stay centered
-    // on their true 45-degree slices.
+    // The gap is inset on both sides so the four segments stay centred on
+    // their true 45-degree slices.
     path: arcPath(start + SEGMENT_GAP, end - SEGMENT_GAP, RADIUS),
     labelPos: polar(mid, LABEL_RADIUS),
-    // Centering every label would push the outer two back over the arc:
-    // near the ends the dial is widest horizontally, so the first and
-    // last labels get anchored outward and sit clear of it instead.
+    // Centring every label would push the outer two back over the arc: near
+    // the ends the dial is widest horizontally, so the first and last labels
+    // get anchored outward and sit clear of it instead.
     anchor: (mid < -45 ? "end" : mid > 45 ? "start" : "middle") as
       | "start"
       | "middle"
       | "end",
   };
 });
+
+const NEEDLE_TIP = RADIUS - 13;
+const NEEDLE_BASE = 2.6;
 
 export function ScoreGauge({
   score,
@@ -79,16 +96,17 @@ export function ScoreGauge({
   const safeScore = clampScore(score);
   const angle = needleAngleFor(safeScore);
   const activeBand = bandFor(safeScore);
+  const activeColor = BAND_COLORS[READINESS_BANDS.indexOf(activeBand)];
 
   return (
     <svg
-      viewBox="-20 0 240 120"
-      // Scales fluidly with whatever column it sits in and stays centered.
-      // The cap stops the dial from dominating the page on wide viewports;
-      // the SVG's viewBox aspect ratio handles the height on its own.
-      className="block w-full max-w-[420px] h-auto mx-auto"
+      viewBox="-26 4 252 134"
+      // Scales fluidly with whatever column it sits in and stays centred. The
+      // cap stops the dial from dominating the page on wide viewports; the
+      // viewBox aspect ratio handles the height on its own.
+      className="block w-full max-w-[400px] h-auto mx-auto"
       role="img"
-      aria-label={`${label}: ${Math.round(safeScore)} out of 100 — ${activeBand.label}`}
+      aria-label={`${label}: ${activeBand.label}`}
     >
       <g aria-hidden="true">
         {SEGMENTS.map((seg) => (
@@ -98,33 +116,37 @@ export function ScoreGauge({
             fill="none"
             stroke={seg.color}
             strokeWidth={TRACK_WIDTH}
-            strokeLinecap="butt"
+            strokeLinecap="round"
+            // The band the score landed in carries full weight; the other
+            // three stay legible but recede, so the eye finds the answer
+            // before it reads the scale.
+            opacity={seg.label === activeBand.label ? 1 : 0.32}
           />
         ))}
 
-        {SEGMENTS.map((seg) => {
-          const isActive = seg.label === activeBand.label;
-          return (
-            <text
-              key={seg.label}
-              x={seg.labelPos.x}
-              y={seg.labelPos.y}
-              textAnchor={seg.anchor}
-              dominantBaseline="central"
-              fill={isActive ? seg.color : "var(--color-ink-muted)"}
-              fontSize="11"
-              fontWeight={isActive ? 700 : 500}
-              style={{ fontFamily: "var(--font-sans)", letterSpacing: "0.03em" }}
-            >
-              {seg.label}
-            </text>
-          );
-        })}
+        {SEGMENTS.map((seg) => (
+          <text
+            key={seg.label}
+            x={seg.labelPos.x}
+            y={seg.labelPos.y}
+            textAnchor={seg.anchor}
+            dominantBaseline="central"
+            // Uniformly quiet. The active band is already carried by the
+            // full-strength segment, the needle and the word under the hub;
+            // a fourth emphasis here just made the same point again.
+            fill="var(--color-ink-muted)"
+            fontSize="9.5"
+            fontWeight={500}
+            style={{ fontFamily: "var(--font-sans)", letterSpacing: "0.08em" }}
+          >
+            {seg.label.toUpperCase()}
+          </text>
+        ))}
 
         {/* The needle rotates about the hub. Its transition is intentionally
-            the only motion here, and the global prefers-reduced-motion rule
-            in app/globals.css cancels it with !important for anyone who has
-            asked for less movement. */}
+            the only motion here, and the global prefers-reduced-motion rule in
+            app/globals.css cancels it with !important for anyone who has asked
+            for less movement. */}
         <g
           style={{
             transform: `rotate(${angle}deg)`,
@@ -133,15 +155,24 @@ export function ScoreGauge({
           }}
         >
           <polygon
-            points={`${CENTER_X - 4.5},${CENTER_Y} ${CENTER_X},${CENTER_Y - RADIUS + 5} ${CENTER_X + 4.5},${CENTER_Y}`}
+            points={`${CENTER_X - NEEDLE_BASE},${CENTER_Y} ${CENTER_X},${CENTER_Y - NEEDLE_TIP} ${CENTER_X + NEEDLE_BASE},${CENTER_Y}`}
             fill="var(--color-ink)"
           />
         </g>
-        {/* One solid pivot. This used to be a dark circle with a small
-            paper-colored dot inside it; at the size the dial actually
-            renders, that inner dot read as a hole punched in the hub
-            rather than as a bearing. */}
-        <circle cx={CENTER_X} cy={CENTER_Y} r="6" fill="var(--color-ink)" />
+        <circle cx={CENTER_X} cy={CENTER_Y} r="4" fill="var(--color-ink)" />
+
+        {/* The reading, in the empty half the dial leaves behind. */}
+        <text
+          x={CENTER_X}
+          y={CENTER_Y + 26}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={activeColor}
+          fontSize="22"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {activeBand.label}
+        </text>
       </g>
     </svg>
   );
