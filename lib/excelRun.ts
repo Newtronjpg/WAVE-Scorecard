@@ -4,6 +4,11 @@ import type { Question } from "./questions";
 import { normalizeAnswer } from "./scoring";
 import { commentsMap } from "./comments";
 import { followUpLabel } from "./followUp";
+import {
+  ADVISOR_AREAS,
+  normalizeAdvisorRatings,
+  advisorRatingLabel,
+} from "./advisors";
 
 // One run, fully expanded, against the question set that run actually
 // answered -- not today's. A question reworded or removed since must not
@@ -45,6 +50,23 @@ export async function buildRunWorkbook(
   // other run would be noise in a sheet someone opens to read one submission.
   if (submission.followUpNote) {
     sheet.addRow(["Wants to discuss", submission.followUpNote]);
+  }
+
+  // Only the areas they actually answered. A six-row block that is blank on
+  // every run where the section was skipped -- which is expected, it is
+  // optional -- would be noise in a sheet opened to read one submission.
+  const advisors = normalizeAdvisorRatings(submission.advisorRatings);
+  if (advisors) {
+    sheet.addRow([]);
+    sheet.addRow(["Other advisors"]);
+    for (const area of ADVISOR_AREAS) {
+      const entry = advisors[area.id];
+      if (!entry) continue;
+      sheet.addRow([
+        area.label,
+        [advisorRatingLabel(entry.rating), entry.name].filter(Boolean).join(" -- "),
+      ]);
+    }
   }
   sheet.addRow([]);
 

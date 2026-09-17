@@ -11,6 +11,7 @@ import {
   FOLLOW_UP_QUESTION,
   FOLLOW_UP_YES,
 } from "@/lib/followUp";
+import { ADVISOR_AREAS, ADVISOR_SECTION_TITLE } from "@/lib/advisors";
 import { scoreAssessment } from "@/lib/scoring";
 import type { Question } from "@/lib/questions";
 
@@ -59,6 +60,16 @@ function answerSections(rating: number) {
       screen.getByRole("button", { name: /next section|see my results/i })
     );
   }
+  // The last gap now hands off to Brandon's optional advisor section rather
+  // than submitting. Skipped entirely here -- that is the default path, and
+  // the advisor tests drive it deliberately.
+  skipAdvisors();
+}
+
+/** Leaves the optional advisor section untouched. */
+function skipAdvisors() {
+  const go = screen.queryByRole("button", { name: /see my results/i });
+  if (go) fireEvent.click(go);
 }
 
 afterEach(() => {
@@ -441,5 +452,113 @@ describe("the follow-up question on the results page", () => {
     fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_YES }));
     await waitFor(() => expect(printButton().disabled).toBe(false));
     expect(screen.queryByText(/couldn.t record that answer/i)).toBeNull();
+  });
+});
+
+// Brandon's optional advisor section, between the last gap and the results.
+// The property that matters most is that it is genuinely optional: skipping it
+// must be as complete an answer as filling it in.
+describe("the optional advisor section", () => {
+  async function toAdvisors(rating = 3) {
+    const answers: Record<string, number> = {};
+    for (const q of V13) answers[q.id] = rating;
+    const score = scoreAssessment(answers, V13);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...score, saved: true, submissionId: "sub_test_1" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    const sections = new Set(V13.map((q) => q.gap)).size;
+    for (let i = 0; i < sections; i++) {
+      for (const r of screen.getAllByRole("radio")) {
+        if (r.getAttribute("aria-label")?.startsWith(`${rating}:`)) fireEvent.click(r);
+      }
+      fireEvent.click(
+        screen.getByRole("button", { name: /next section|see my results/i })
+      );
+    }
+    return fetchMock;
+  }
+
+  function submitBody(fetchMock: { mock: { calls: unknown[][] } }) {
+    const call = fetchMock.mock.calls.find((c) => c[0] === "/api/submit");
+    return JSON.parse((call![1] as RequestInit).body as string);
+  }
+
+  it("stands between the last gap and the results", async () => {
+    await toAdvisors();
+    expect(screen.getByText(ADVISOR_SECTION_TITLE)).toBeTruthy();
+    expect(screen.queryByText(/Transition readiness/i)).toBeNull();
+    // All six areas Brandon listed.
+    for (const area of ADVISOR_AREAS) {
+      expect(screen.getByText(area.label), area.id).toBeTruthy();
+    }
+  });
+
+  it("lets someone straight through without answering anything", async () => {
+    // The single most important property: this must never stand between
+    // someone and the results they just earned.
+    const fetchMock = await toAdvisors();
+    const go = screen.getByRole("button", { name: /see my results/i }) as HTMLButtonElement;
+    expect(go.disabled).toBe(false);
+
+    fireEvent.click(go);
+    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
+    // Nothing answered travels as an empty object; the server stores null.
+    expect(submitBody(fetchMock).advisorRatings).toEqual({});
+  });
+
+  it("sends a rating and a name for the area they filled in", async () => {
+    const fetchMock = await toAdvisors();
+    fireEvent.click(screen.getByRole("radio", { name: "Legal: Good" }));
+    fireEvent.change(screen.getByLabelText(/Legal adviser name/i), {
+      target: { value: "Smith LLP" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
+
+    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
+    expect(submitBody(fetchMock).advisorRatings.legal).toEqual({
+      rating: 3,
+      name: "Smith LLP",
+    });
+  });
+
+  it("lets a rating be taken back", async () => {
+    // Nothing else in the assessment can be un-answered, but every control
+    // here is optional and there is no other way back to "I did not say".
+    const fetchMock = await toAdvisors();
+    const good = screen.getByRole("radio", { name: "HR: Good" });
+    fireEvent.click(good);
+    expect(good.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(good);
+    expect(good.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
+    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
+    expect(submitBody(fetchMock).advisorRatings.hr?.rating).toBeUndefined();
+  });
+
+  it("goes back to the last gap with the answers intact", async () => {
+    await toAdvisors();
+    fireEvent.click(screen.getByRole("radio", { name: "Banking: Fair" }));
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+
+    expect(screen.queryByText(ADVISOR_SECTION_TITLE)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
+    expect(
+      screen.getByRole("radio", { name: "Banking: Fair" }).getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("is not counted as a sixth section", async () => {
+    // It is not part of the assessment and the progress bar must not imply
+    // there is more scoring to do.
+    await toAdvisors();
+    expect(screen.queryByText(/Section 6 of/i)).toBeNull();
+    expect(screen.getByText(/optional/i)).toBeTruthy();
   });
 });

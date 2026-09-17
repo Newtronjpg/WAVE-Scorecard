@@ -93,6 +93,16 @@ model Submission {
   // the admin table and the exports.
   followUpNote String?
 
+  // Brandon's optional advisor section, answered between the last gap and the
+  // results: { "legal": { "rating": 3, "name": "Smith LLP" }, ... }, keyed by
+  // the six areas in lib/advisors.ts. An area they said nothing about is
+  // absent rather than present-and-empty.
+  //
+  // Null, never {}, when they skipped the whole section -- and skipping is
+  // expected, so null here carries no meaning beyond itself. Nothing in it is
+  // scored; it records who already holds the relationship.
+  advisorRatings Json?
+
   // Which published question set this run answered. Null means the
   // factory default, including every run taken before versioning existed.
   questionSetVersion Int?

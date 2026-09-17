@@ -6,6 +6,12 @@ import { RatingSelector } from "./RatingSelector";
 import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
+import { AdvisorSection } from "./AdvisorSection";
+import {
+  ADVISOR_SECTION_TAGLINE,
+  ADVISOR_SECTION_TITLE,
+  type AdvisorRatings,
+} from "@/lib/advisors";
 import {
   FOLLOW_UP_NOTE_HINT,
   FOLLOW_UP_NOTE_LABEL,
@@ -45,7 +51,7 @@ type ScoreResultShape = {
   submissionId?: string | null;
 };
 
-type View = "intro" | "section" | "submitting" | "results";
+type View = "intro" | "section" | "advisors" | "submitting" | "results";
 
 // How long a follow-up write may take before it is treated as failed. Short:
 // the request is two columns on a row that already exists, and the person is
@@ -91,6 +97,10 @@ export function Assessment({
   // Offered only alongside a yes: what they would like the conversation to
   // cover. Always optional.
   const [followUpNote, setFollowUpNote] = useState("");
+  // Brandon's optional advisor section, asked after the last gap and before
+  // the results. Nothing here feeds the score; it is intelligence about who
+  // already holds the relationship, and skipping it must cost nothing.
+  const [advisors, setAdvisors] = useState<AdvisorRatings>({});
   // What the server has CONFIRMED, so blurring an untouched box, or answering
   // the same way twice, does not spend a write. Only ever set after a 2xx.
   const lastConfirmed = useRef<string | null>(null);
@@ -159,6 +169,7 @@ export function Assessment({
           email: email.trim(),
           industry: resolveIndustry(industry, industryOther),
           followUpInterest,
+          advisorRatings: advisors,
           // The version loaded at the top of this component, not
           // whatever might be published by now.
           questionSetVersion: version,
@@ -177,7 +188,7 @@ export function Assessment({
           ? e.message
           : "Something went wrong submitting the assessment."
       );
-      setView("section");
+      setView("advisors");
     }
   }
 
@@ -295,11 +306,18 @@ export function Assessment({
     if (sectionIndex < GAPS.length - 1) {
       setSectionIndex((i) => i + 1);
     } else {
-      handleFinish();
+      setView("advisors");
     }
   }
 
   function handleBack() {
+    // sectionIndex is still the last gap while the advisor section is up, so
+    // this lands back on the questions they came from.
+    if (view === "advisors") {
+      setError(null);
+      setView("section");
+      return;
+    }
     if (sectionIndex === 0) {
       setView("intro");
     } else {
@@ -312,6 +330,7 @@ export function Assessment({
     setComments({});
     setFollowUpInterest(null);
     setFollowUpNote("");
+    setAdvisors({});
     lastConfirmed.current = null;
     inFlight.current = null;
     setNoteStatus("idle");
@@ -394,7 +413,20 @@ export function Assessment({
             readouts read as one list rather than four stacked cards. */}
         <div className="mt-8 divide-y divide-line">
           {result.gaps.map((g) => (
-            <div key={g.gap} className="py-6 sm:py-7 first:pt-0">
+            // Brandon's two-column request: the reading on the left, what it
+            // has meant in practice on the right, so the page is roughly half
+            // as long to scroll and to print. One column below md -- side by
+            // side on a phone would give each half about 150px and turn both
+            // into a column of single words.
+            //
+            // items-start, not stretch: the two halves are never the same
+            // height, and stretching the tinted box to match a long paragraph
+            // leaves it mostly empty tint.
+            <div
+              key={g.gap}
+              className="py-6 sm:py-7 first:pt-0 grid gap-4 md:grid-cols-2 md:gap-8 items-start"
+            >
+              <div>
               <div className="flex items-baseline justify-between gap-4">
                 <h3 className="font-display text-xl text-ink">{g.name}</h3>
                 {/* Same red-to-green ramp as the gauge arc, so a gap reading
@@ -411,15 +443,15 @@ export function Assessment({
               <p className="mt-2 text-ink leading-relaxed">
                 {buildGapParagraph(g.gap, g.band.label, g.lowestQuestionId, g.lowestRating, phrases)}
               </p>
-              {/* Work F&W has already done for a business in this position.
-                  A tinted block rather than another paragraph, so the shift
-                  from "here is where you stand" to "here is what that has
-                  looked like" is visible without a heading shouting it.
-                  Rendered only when there is copy: the block is awaiting
-                  Brandon's language, and an empty tinted box on a live results
-                  page reads as a bug. */}
+              </div>
+              {/* What that has looked like for businesses in the same
+                  position. A tinted block rather than another paragraph, so
+                  the shift from "here is where you stand" to "here is what
+                  that has meant" is visible without a heading shouting it.
+                  Still conditional: every slot is filled today, but a blank
+                  one must render nothing rather than an empty tinted box. */}
               {GAP_BAND_WORK[g.gap][g.band.label] && (
-                <div className="mt-4 rounded-md bg-[var(--color-tint)] px-4 py-3">
+                <div className="rounded-md bg-[var(--color-tint)] px-4 py-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                     {GAP_WORK_HEADING}
                   </p>
@@ -612,6 +644,51 @@ export function Assessment({
 
   // Submitting
   //
+  // Brandon's advisor section: optional, and between the last gap and the
+  // results. It renders as its own step rather than a sixth section, because
+  // it is not part of the assessment -- nothing here is scored, the progress
+  // bar does not count it, and "Skip" is as complete an answer as any other.
+  if (view === "advisors") {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
+        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
+          One more thing
+        </p>
+        <h2 className="font-display text-3xl text-ink mt-2">
+          {ADVISOR_SECTION_TITLE}
+        </h2>
+        <p className="text-ink-muted italic mt-1">{ADVISOR_SECTION_TAGLINE}</p>
+
+        {error && (
+          <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
+            {error}
+          </div>
+        )}
+
+        <AdvisorSection value={advisors} onChange={setAdvisors} />
+
+        <div className="mt-10 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink hover:bg-paper-raised cursor-pointer"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            // Never disabled. The whole section is optional, so there is no
+            // state in which someone can be stuck here.
+            onClick={handleFinish}
+            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] cursor-pointer"
+          >
+            See my results
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Previously this fell through to the section render with only the button
   // label changed, so the whole page sat still while the request was in
   // flight -- Ben's note was that it "appears to freeze before jumping to the

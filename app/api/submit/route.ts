@@ -17,6 +17,7 @@ import {
 import { getPublishedQuestions, getQuestionsForVersion } from "@/lib/questionContent";
 import { toStored } from "@/lib/questionSet";
 import type { Question } from "@/lib/questions";
+import { normalizeAdvisorRatings } from "@/lib/advisors";
 import { getNotifyRecipients } from "@/lib/settings";
 import { checkRateLimit, clientIdentifier } from "@/lib/rateLimit";
 import {
@@ -224,6 +225,12 @@ export async function POST(req: NextRequest) {
     // not answering is legal and must never block a submission, and null
     // stays distinct from an explicit "not at this time".
     followUpInterest: z.boolean().nullable().optional(),
+    // Brandon's optional advisor section. Deliberately permissive -- unknown
+    // areas, out-of-range ratings and over-long names are filtered and
+    // truncated by normalizeAdvisorRatings below rather than rejected here.
+    // This section is optional by design, and it must never be the reason
+    // someone loses ten minutes of answers.
+    advisorRatings: z.unknown().optional(),
     // Optional so an older cached client bundle that doesn't send it still
     // works via the live-published fallback above.
     questionSetVersion: z.number().int().nullable().optional(),
@@ -243,6 +250,7 @@ export async function POST(req: NextRequest) {
     parsed.data.comments,
     questions.map((q) => q.id)
   );
+  const advisorRatings = normalizeAdvisorRatings(parsed.data.advisorRatings);
 
   let result;
   try {
@@ -290,6 +298,12 @@ export async function POST(req: NextRequest) {
         answers,
         // null, never {}, when nothing was written -- see lib/comments.ts.
         comments: comments ?? undefined,
+        // Same rule: skipped means absent, not an empty object. The cast is
+        // the same one questionSetSnapshot needs: Prisma's InputJsonValue
+        // wants an index signature, which a Partial<Record<union, ...>> does
+        // not have even though its shape is plain JSON.
+        advisorRatings:
+          (advisorRatings as Prisma.InputJsonValue | undefined) ?? undefined,
         wealthScore: wealth.score,
         accountingScore: accounting.score,
         valueScore: value.score,

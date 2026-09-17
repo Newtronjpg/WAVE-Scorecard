@@ -9,6 +9,7 @@ import { verifySessionToken } from "@/lib/adminSession";
 import { getNotifyRecipientsRaw } from "@/lib/settings";
 import { commentCount } from "@/lib/comments";
 import { followUpLabel } from "@/lib/followUp";
+import { advisorCount } from "@/lib/advisors";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,21 @@ export default async function AdminPage() {
                 <td className="px-3 py-2">
                   <span className="inline-flex items-center gap-1.5">
                     {s.companyName ?? "-"}
+                    {advisorCount(s.advisorRatings) > 0 && (
+                      // Same marker pattern: the detail lives in the export,
+                      // so without something here nobody knows the optional
+                      // advisor section was filled in at all.
+                      <span
+                        title={`Rated ${advisorCount(s.advisorRatings)} other advisor ${
+                          advisorCount(s.advisorRatings) === 1 ? "area" : "areas"
+                        }, see the export`}
+                        aria-label={`Rated ${advisorCount(s.advisorRatings)} other advisor areas`}
+                        className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--color-tint)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-maroon"
+                      >
+                        <span aria-hidden="true">&#128188;</span>
+                        {advisorCount(s.advisorRatings)}
+                      </span>
+                    )}
                     {commentCount(s.comments) > 0 && (
                       // The notes themselves only exist in the per-run
                       // export, so without a marker here nobody knows there
