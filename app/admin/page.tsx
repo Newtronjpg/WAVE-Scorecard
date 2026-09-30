@@ -9,7 +9,7 @@ import { verifySessionToken } from "@/lib/adminSession";
 import { getNotifyRecipientsRaw } from "@/lib/settings";
 import { commentCount } from "@/lib/comments";
 import { followUpLabel } from "@/lib/followUp";
-import { advisorCount } from "@/lib/advisors";
+import { advisorSummary } from "@/lib/advisors";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +107,7 @@ export default async function AdminPage() {
               <th className="px-3 py-2 font-medium">Industry</th>
               <th className="px-3 py-2 font-medium">Email</th>
               <th className="px-3 py-2 font-medium">Follow Up</th>
+              <th className="px-3 py-2 font-medium">Other advisors</th>
               <th className="px-3 py-2 font-medium text-right">Overall</th>
               <th className="px-3 py-2 font-medium text-right">Wealth</th>
               <th className="px-3 py-2 font-medium text-right">Accounting</th>
@@ -125,21 +126,6 @@ export default async function AdminPage() {
                 <td className="px-3 py-2">
                   <span className="inline-flex items-center gap-1.5">
                     {s.companyName ?? "-"}
-                    {advisorCount(s.advisorRatings) > 0 && (
-                      // Same marker pattern: the detail lives in the export,
-                      // so without something here nobody knows the optional
-                      // advisor section was filled in at all.
-                      <span
-                        title={`Rated ${advisorCount(s.advisorRatings)} other advisor ${
-                          advisorCount(s.advisorRatings) === 1 ? "area" : "areas"
-                        }, see the export`}
-                        aria-label={`Rated ${advisorCount(s.advisorRatings)} other advisor areas`}
-                        className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--color-tint)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-maroon"
-                      >
-                        <span aria-hidden="true">&#128188;</span>
-                        {advisorCount(s.advisorRatings)}
-                      </span>
-                    )}
                     {commentCount(s.comments) > 0 && (
                       // The notes themselves only exist in the per-run
                       // export, so without a marker here nobody knows there
@@ -194,6 +180,18 @@ export default async function AdminPage() {
                     <span className="text-ink-muted">
                       {followUpLabel(s.followUpInterest) || "-"}
                     </span>
+                  )}
+                </td>
+                {/* On screen rather than export-only, because this is the one
+                    thing here Ben reads DOWN a column: who already holds the
+                    relationship, across prospects. A note is read once, when
+                    you call someone; this is a pattern you spot by scanning.
+                    min-w-0 with a max width so a run naming all six firms
+                    wraps in place instead of shoving the scores off the
+                    right-hand edge. */}
+                <td className="px-3 py-2 align-top text-xs text-ink-muted max-w-[22rem]">
+                  {advisorSummary(s.advisorRatings) || (
+                    <span className="text-ink-muted">-</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right font-medium">{s.overallScore}</td>

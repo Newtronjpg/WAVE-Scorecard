@@ -5,6 +5,7 @@ import {
   ADVISOR_RATINGS,
   MAX_ADVISOR_NAME_LENGTH,
   advisorCount,
+  advisorSummary,
   formatAdvisorEntry,
   normalizeAdvisorRatings,
 } from "@/lib/advisors";
@@ -131,5 +132,43 @@ describe("reading it back", () => {
     for (const id of ADVISOR_AREA_IDS) {
       expect(formatAdvisorEntry(id, { rating: 1 })).not.toContain(id);
     }
+  });
+});
+
+// One line per submission, shown in the admin table and written into the
+// all-submissions export. Ben scans down this column to see who already holds
+// a relationship, so it has to read as a sentence rather than as a dump.
+describe("advisorSummary", () => {
+  it("reads as one line, in the order the areas are asked", () => {
+    expect(
+      advisorSummary({
+        banking: { rating: 2 },
+        legal: { rating: 3, name: "Smith LLP" },
+      })
+    ).toBe("Legal: Good (Smith LLP); Banking: Fair");
+  });
+
+  it("is empty when the section was skipped, which is the common case", () => {
+    // Empty rather than a dash or "none": the caller decides what an
+    // unanswered cell looks like, and the export wants a genuinely blank one.
+    expect(advisorSummary(null)).toBe("");
+    expect(advisorSummary({})).toBe("");
+    expect(advisorSummary(undefined)).toBe("");
+  });
+
+  it("names an adviser they would not rate", () => {
+    // Knowing who holds the relationship is worth something on its own, even
+    // with no opinion attached to it. The parentheses are formatAdvisorEntry's
+    // existing shape, pinned above -- they separate a firm from its rating, so
+    // with no rating they wrap nothing. Left alone rather than quietly
+    // restyled, because the same string is already in shipped exports.
+    expect(advisorSummary({ hr: { name: "Paychex" } })).toBe("HR: (Paychex)");
+  });
+
+  it("survives a row written before the section existed", () => {
+    // Every submission before this shipped has a null column, and a crash
+    // here would take out the whole admin table rather than one cell.
+    expect(advisorSummary("not an object")).toBe("");
+    expect(advisorSummary([1, 2, 3])).toBe("");
   });
 });

@@ -1,10 +1,6 @@
 import ExcelJS from "exceljs";
 import { followUpLabel } from "./followUp";
-import {
-  ADVISOR_AREA_IDS,
-  formatAdvisorEntry,
-  normalizeAdvisorRatings,
-} from "./advisors";
+import { advisorSummary } from "./advisors";
 import type { Submission } from "@prisma/client";
 import type { StoredQuestion } from "./questionSet";
 
@@ -18,16 +14,6 @@ import type { StoredQuestion } from "./questionSet";
 const BRAND_MAROON = "FF6D0104";
 const HEADER_TEXT = "FFFFFFFF";
 const MAX_CHOICE_COLUMNS = 7;
-
-// "Legal: Good (Smith LLP); Banking: Fair" -- empty when the section was
-// skipped, which is the common case.
-function advisorSummary(value: unknown): string {
-  const advisors = normalizeAdvisorRatings(value);
-  if (!advisors) return "";
-  return ADVISOR_AREA_IDS.filter((id) => advisors[id])
-    .map((id) => formatAdvisorEntry(id, advisors[id]!))
-    .join("; ");
-}
 
 function styleHeaderRow(row: ExcelJS.Row) {
   row.eachCell((cell) => {

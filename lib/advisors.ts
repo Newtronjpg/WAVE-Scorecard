@@ -130,3 +130,20 @@ export function advisorCount(value: unknown): number {
   const cleaned = normalizeAdvisorRatings(value);
   return cleaned ? Object.keys(cleaned).length : 0;
 }
+
+/**
+ * One line naming every area they said something about, e.g.
+ * "Legal: Good (Smith LLP); Banking: Fair".
+ *
+ * Empty when the section was skipped, which is the common case and the whole
+ * point of it being optional. Ordered by ADVISOR_AREA_IDS rather than by the
+ * keys of the stored object, so the column reads the same way down every row
+ * regardless of which order someone filled the panel in.
+ */
+export function advisorSummary(value: unknown): string {
+  const advisors = normalizeAdvisorRatings(value);
+  if (!advisors) return "";
+  return ADVISOR_AREA_IDS.filter((id) => advisors[id])
+    .map((id) => formatAdvisorEntry(id, advisors[id]!))
+    .join("; ");
+}
