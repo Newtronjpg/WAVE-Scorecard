@@ -35,6 +35,10 @@ export const ADVISOR_RATINGS = [
 ] as const;
 
 export const ADVISOR_SECTION_TITLE = "Your other advisors";
+// What the button on the results page says. It sits beside "Start over" and
+// "Print my results", so it names an action someone may take rather than a
+// step they owe -- nothing on the results page is owed.
+export const ADVISOR_BUTTON_LABEL = "Rate your other advisors";
 export const ADVISOR_SECTION_TAGLINE =
   "Optional — skip any or all of it and your results are unaffected.";
 export const ADVISOR_SECTION_INTRO =
@@ -44,6 +48,17 @@ export const ADVISOR_NAME_PLACEHOLDER = "Firm or adviser name (optional)";
 // The maximum length of a named adviser. Long enough for "Smith, Jones &
 // Partners LLP", short enough that the column and the export stay readable.
 export const MAX_ADVISOR_NAME_LENGTH = 120;
+
+// How long after submitting the row still accepts advisor ratings.
+//
+// The section is answered on the results page, so a real answer always lands
+// within minutes of the row being written. Knowing a cuid is the only thing
+// authorising that write and a cuid is not a security token, so the window is
+// what stops a guessed or replayed id being a permanent licence to rewrite
+// someone's row. Its own constant rather than the follow-up's: the two are
+// the same length today, but they answer different questions and either could
+// need to move without dragging the other with it.
+export const ADVISOR_WRITE_WINDOW_MS = 2 * 60 * 60 * 1000; // two hours
 
 export interface AdvisorEntry {
   /** 1-4, or absent when they did not rate this area. */

@@ -99,6 +99,28 @@ describe("POST /api/submit when the database write succeeds", () => {
     expect(json.saved).toBe(true);
   });
 
+  it("ignores advisor ratings arriving in the submit body", async () => {
+    // They used to ride along here, back when the section was a step before
+    // the results. It is a button ON the results page now and the answer
+    // comes back via /api/advisors, so this field has exactly one write path.
+    //
+    // A browser holding the previous bundle can still POST it during the
+    // deploy window, and that must be quietly ignored rather than stored or
+    // rejected -- an unknown field must never cost someone their submission.
+    createMock.mockResolvedValue({ id: "abc" });
+    const { POST } = await import("@/app/api/submit/route");
+
+    const res = await POST(
+      submitRequest({
+        ...validBody,
+        advisorRatings: { legal: { rating: 4, name: "Smith LLP" } },
+      }) as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(createMock.mock.calls[0][0].data.advisorRatings).toBeUndefined();
+  });
+
   it("does not raise a failure alert", async () => {
     createMock.mockResolvedValue({ id: "abc" });
     const { POST } = await import("@/app/api/submit/route");

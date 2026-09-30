@@ -11,7 +11,11 @@ import {
   FOLLOW_UP_QUESTION,
   FOLLOW_UP_YES,
 } from "@/lib/followUp";
-import { ADVISOR_AREAS, ADVISOR_SECTION_TITLE } from "@/lib/advisors";
+import {
+  ADVISOR_AREAS,
+  ADVISOR_BUTTON_LABEL,
+  ADVISOR_SECTION_TITLE,
+} from "@/lib/advisors";
 import { scoreAssessment } from "@/lib/scoring";
 import type { Question } from "@/lib/questions";
 
@@ -60,16 +64,9 @@ function answerSections(rating: number) {
       screen.getByRole("button", { name: /next section|see my results/i })
     );
   }
-  // The last gap now hands off to Brandon's optional advisor section rather
-  // than submitting. Skipped entirely here -- that is the default path, and
-  // the advisor tests drive it deliberately.
-  skipAdvisors();
-}
-
-/** Leaves the optional advisor section untouched. */
-function skipAdvisors() {
-  const go = screen.queryByRole("button", { name: /see my results/i });
-  if (go) fireEvent.click(go);
+  // The last gap submits. Nothing stands between it and the results any more:
+  // the advisor section is a button ON the results page now, not a step in
+  // front of it.
 }
 
 afterEach(() => {
@@ -455,33 +452,43 @@ describe("the follow-up question on the results page", () => {
   });
 });
 
-// Brandon's optional advisor section, between the last gap and the results.
-// The property that matters most is that it is genuinely optional: skipping it
-// must be as complete an answer as filling it in.
-describe("the optional advisor section", () => {
-  async function toAdvisors(rating = 3) {
+
+// Brandon's optional advisor section, now a button ON the results page rather
+// than a step standing in front of them. The property that mattered most when
+// it was a step matters just as much here: it must never come between someone
+// and the results they just spent ten minutes earning.
+describe("the optional advisor panel", () => {
+  async function atResults(opts: { advisorsOk?: boolean } = {}) {
     const answers: Record<string, number> = {};
-    for (const q of V13) answers[q.id] = rating;
+    for (const q of V13) answers[q.id] = 3;
     const score = scoreAssessment(answers, V13);
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      status: 200,
+    // Routed, so a failing /api/advisors can be tested without also breaking
+    // the submit that has to succeed first.
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: url === "/api/advisors" ? opts.advisorsOk !== false : true,
+      status: url === "/api/advisors" && opts.advisorsOk === false ? 500 : 200,
       json: async () => ({ ...score, saved: true, submissionId: "sub_test_1" }),
     }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<Assessment questions={V13} version={13} />);
     fillIntro();
-    const sections = new Set(V13.map((q) => q.gap)).size;
-    for (let i = 0; i < sections; i++) {
-      for (const r of screen.getAllByRole("radio")) {
-        if (r.getAttribute("aria-label")?.startsWith(`${rating}:`)) fireEvent.click(r);
-      }
-      fireEvent.click(
-        screen.getByRole("button", { name: /next section|see my results/i })
-      );
-    }
+    answerSections(3);
+    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
     return fetchMock;
+  }
+
+  const openButton = () =>
+    screen.getByRole("button", { name: ADVISOR_BUTTON_LABEL }) as HTMLButtonElement;
+  const printButton = () =>
+    screen.getByRole("button", { name: /print my results/i }) as HTMLButtonElement;
+  const panel = () => screen.queryByRole("region", { name: ADVISOR_SECTION_TITLE });
+
+  /** The bodies of every POST to /api/advisors, in order. */
+  function advisorCalls(fetchMock: { mock: { calls: unknown[][] } }) {
+    return fetchMock.mock.calls
+      .filter((c) => c[0] === "/api/advisors")
+      .map((c) => JSON.parse((c[1] as RequestInit).body as string));
   }
 
   function submitBody(fetchMock: { mock: { calls: unknown[][] } }) {
@@ -489,76 +496,144 @@ describe("the optional advisor section", () => {
     return JSON.parse((call![1] as RequestInit).body as string);
   }
 
-  it("stands between the last gap and the results", async () => {
-    await toAdvisors();
-    expect(screen.getByText(ADVISOR_SECTION_TITLE)).toBeTruthy();
-    expect(screen.queryByText(/Transition readiness/i)).toBeNull();
+  it("no longer stands between the last gap and the results", async () => {
+    // The whole point of the move: answering the last gap lands on the
+    // results, not on one more screen.
+    await atResults();
+    expect(screen.getByText(/Transition readiness/i)).toBeTruthy();
+    expect(panel()).toBeNull();
+  });
+
+  it("offers it as a third button beside Start over and Print my results", async () => {
+    await atResults();
+    const row = printButton().parentElement!;
+    expect(within(row).getByRole("button", { name: /start over/i })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: ADVISOR_BUTTON_LABEL })).toBeTruthy();
+  });
+
+  it("shows nothing until the button is pressed", async () => {
+    await atResults();
+    expect(panel()).toBeNull();
+
+    fireEvent.click(openButton());
+    expect(panel()).toBeTruthy();
     // All six areas Brandon listed.
     for (const area of ADVISOR_AREAS) {
       expect(screen.getByText(area.label), area.id).toBeTruthy();
     }
   });
 
-  it("lets someone straight through without answering anything", async () => {
-    // The single most important property: this must never stand between
-    // someone and the results they just earned.
-    const fetchMock = await toAdvisors();
-    const go = screen.getByRole("button", { name: /see my results/i }) as HTMLButtonElement;
-    expect(go.disabled).toBe(false);
-
-    fireEvent.click(go);
-    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
-    // Nothing answered travels as an empty object; the server stores null.
-    expect(submitBody(fetchMock).advisorRatings).toEqual({});
+  it("closes again without saving anything", async () => {
+    // The button is a toggle. Opening it out of curiosity and shutting it
+    // must not write a row's worth of nothing.
+    const fetchMock = await atResults();
+    fireEvent.click(openButton());
+    fireEvent.click(openButton());
+    expect(panel()).toBeNull();
+    expect(advisorCalls(fetchMock)).toHaveLength(0);
   });
 
-  it("sends a rating and a name for the area they filled in", async () => {
-    const fetchMock = await toAdvisors();
+  it("records what they filled in against the row the submit created", async () => {
+    const fetchMock = await atResults();
+    fireEvent.click(openButton());
     fireEvent.click(screen.getByRole("radio", { name: "Legal: Good" }));
     fireEvent.change(screen.getByLabelText(/Legal adviser name/i), {
       target: { value: "Smith LLP" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
-    expect(submitBody(fetchMock).advisorRatings.legal).toEqual({
-      rating: 3,
-      name: "Smith LLP",
+    await waitFor(() => expect(advisorCalls(fetchMock)).toHaveLength(1));
+    expect(advisorCalls(fetchMock)[0]).toEqual({
+      submissionId: "sub_test_1",
+      advisorRatings: { legal: { rating: 3, name: "Smith LLP" } },
     });
+    expect(screen.getByText(/saved/i)).toBeTruthy();
+  });
+
+  it("writes nothing until Save is pressed", async () => {
+    // Deliberately unlike the follow-up note, which also saves on blur. Six
+    // ratings and six text boxes would mean a dozen blur writes per person and
+    // a dozen chances to race; the visible button is the whole mechanism here.
+    const fetchMock = await atResults();
+    fireEvent.click(openButton());
+    fireEvent.click(screen.getByRole("radio", { name: "Banking: Fair" }));
+    fireEvent.change(screen.getByLabelText(/Banking adviser name/i), {
+      target: { value: "First National" },
+    });
+    fireEvent.blur(screen.getByLabelText(/Banking adviser name/i));
+    expect(advisorCalls(fetchMock)).toHaveLength(0);
   });
 
   it("lets a rating be taken back", async () => {
     // Nothing else in the assessment can be un-answered, but every control
     // here is optional and there is no other way back to "I did not say".
-    const fetchMock = await toAdvisors();
+    const fetchMock = await atResults();
+    fireEvent.click(openButton());
     const good = screen.getByRole("radio", { name: "HR: Good" });
     fireEvent.click(good);
     expect(good.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(good);
     expect(good.getAttribute("aria-checked")).toBe("false");
 
-    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
-    await waitFor(() => expect(screen.getByText(/Transition readiness/i)).toBeTruthy());
-    expect(submitBody(fetchMock).advisorRatings.hr?.rating).toBeUndefined();
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(advisorCalls(fetchMock)).toHaveLength(1));
+    expect(advisorCalls(fetchMock)[0].advisorRatings.hr?.rating).toBeUndefined();
   });
 
-  it("goes back to the last gap with the answers intact", async () => {
-    await toAdvisors();
-    fireEvent.click(screen.getByRole("radio", { name: "Banking: Fair" }));
-    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+  it("admits it when the ratings do not send", async () => {
+    // Showing "Saved" over a failed write is the worst outcome: they would
+    // leave believing F&W knows who their lawyer is when nobody does.
+    await atResults({ advisorsOk: false });
+    fireEvent.click(openButton());
+    fireEvent.click(screen.getByRole("radio", { name: "Legal: Great" }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    expect(screen.queryByText(ADVISOR_SECTION_TITLE)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /see my results/i }));
-    expect(
-      screen.getByRole("radio", { name: "Banking: Fair" }).getAttribute("aria-checked")
-    ).toBe("true");
+    await waitFor(() =>
+      expect(screen.getByText(/didn't send. please try again/i)).toBeTruthy()
+    );
+    expect(screen.queryByText(/saved —/i)).toBeNull();
   });
 
-  it("is not counted as a sixth section", async () => {
-    // It is not part of the assessment and the progress bar must not imply
-    // there is more scoring to do.
-    await toAdvisors();
-    expect(screen.queryByText(/Section 6 of/i)).toBeNull();
-    expect(screen.getByText(/optional/i)).toBeTruthy();
+  it("lets a failed save be retried rather than stranding it", async () => {
+    const fetchMock = await atResults({ advisorsOk: false });
+    fireEvent.click(openButton());
+    fireEvent.click(screen.getByRole("radio", { name: "Legal: Great" }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(screen.getByText(/didn't send/i)).toBeTruthy());
+
+    const before = advisorCalls(fetchMock).length;
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    // The identical payload must go again, not be skipped as "unchanged".
+    await waitFor(() =>
+      expect(advisorCalls(fetchMock).length).toBeGreaterThan(before)
+    );
+  });
+
+  it("never blocks printing, answered or ignored", async () => {
+    // The single most important property, carried over from when this was a
+    // step: it is intelligence for F&W, not part of what they earned.
+    await atResults();
+    fireEvent.click(screen.getByRole("radio", { name: FOLLOW_UP_NO }));
+    expect(printButton().disabled).toBe(false);
+
+    fireEvent.click(openButton());
+    expect(printButton().disabled).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: "Insurance: Poor" }));
+    expect(printButton().disabled).toBe(false);
+  });
+
+  it("does not send advisor ratings with the submission any more", async () => {
+    // One field, one write path. Leaving the old one in the submit body would
+    // mean two ways in, and only one of them getting maintained.
+    const fetchMock = await atResults();
+    expect(submitBody(fetchMock).advisorRatings).toBeUndefined();
+  });
+
+  it("keeps the panel off the printed results", async () => {
+    // What they print is their assessment. Who their banker is belongs to
+    // F&W's copy of the row, not to the page they hand round a boardroom.
+    await atResults();
+    fireEvent.click(openButton());
+    expect(panel()!.className).toContain("print:hidden");
   });
 });

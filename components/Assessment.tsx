@@ -8,6 +8,7 @@ import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
 import { AdvisorSection } from "./AdvisorSection";
 import {
+  ADVISOR_BUTTON_LABEL,
   ADVISOR_SECTION_TAGLINE,
   ADVISOR_SECTION_TITLE,
   type AdvisorRatings,
@@ -51,7 +52,7 @@ type ScoreResultShape = {
   submissionId?: string | null;
 };
 
-type View = "intro" | "section" | "advisors" | "submitting" | "results";
+type View = "intro" | "section" | "submitting" | "results";
 
 // How long a follow-up write may take before it is treated as failed. Short:
 // the request is two columns on a row that already exists, and the person is
@@ -97,10 +98,20 @@ export function Assessment({
   // Offered only alongside a yes: what they would like the conversation to
   // cover. Always optional.
   const [followUpNote, setFollowUpNote] = useState("");
-  // Brandon's optional advisor section, asked after the last gap and before
-  // the results. Nothing here feeds the score; it is intelligence about who
-  // already holds the relationship, and skipping it must cost nothing.
+  // Brandon's optional advisor section, offered behind a button ON the results
+  // page. Nothing here feeds the score; it is intelligence about who already
+  // holds the relationship, and skipping it must cost nothing.
   const [advisors, setAdvisors] = useState<AdvisorRatings>({});
+  // Closed until asked for. A panel that starts open is a step with extra
+  // clicks, which is exactly what this stopped being.
+  const [advisorsOpen, setAdvisorsOpen] = useState(false);
+  // Unlike the note, nothing here saves on blur -- six ratings and six name
+  // boxes would mean a dozen writes per person and a dozen chances to race.
+  // The button is the whole mechanism, so its status line is the only thing
+  // that can say a save happened.
+  const [advisorStatus, setAdvisorStatus] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
   // What the server has CONFIRMED, so blurring an untouched box, or answering
   // the same way twice, does not spend a write. Only ever set after a 2xx.
   const lastConfirmed = useRef<string | null>(null);
@@ -169,7 +180,6 @@ export function Assessment({
           email: email.trim(),
           industry: resolveIndustry(industry, industryOther),
           followUpInterest,
-          advisorRatings: advisors,
           // The version loaded at the top of this component, not
           // whatever might be published by now.
           questionSetVersion: version,
@@ -188,7 +198,9 @@ export function Assessment({
           ? e.message
           : "Something went wrong submitting the assessment."
       );
-      setView("advisors");
+      // Back to the questions they came from. sectionIndex is untouched, so
+      // this is the last gap with every answer still in place.
+      setView("section");
     }
   }
 
@@ -295,6 +307,50 @@ export function Assessment({
     setNoteStatus(ok ? "saved" : "failed");
   }
 
+  /**
+   * Sends the advisor ratings to /api/advisors and says whether they landed.
+   *
+   * Deliberately simpler than recordFollowUp: there is exactly one caller, the
+   * Save button, so there is no blur racing a click and nothing to deduplicate.
+   * Nor is a repeat press short-circuited as "unchanged" -- pressing Save again
+   * after a failure has to actually retry, and that is the only reason anyone
+   * presses it twice with the same values.
+   */
+  async function handleAdvisorsSave() {
+    if (!submissionId) {
+      setAdvisorStatus("failed");
+      return;
+    }
+    setAdvisorStatus("saving");
+
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), FOLLOW_UP_TIMEOUT_MS);
+    try {
+      const res = await fetch("/api/advisors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId, advisorRatings: advisors }),
+        // The tab can be closing on the way to the printer; this asks the
+        // browser to finish the request anyway.
+        keepalive: true,
+        signal: abort.signal,
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setAdvisorStatus("saved");
+    } catch {
+      setAdvisorStatus("failed");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function handleAdvisorsChange(next: AdvisorRatings) {
+    setAdvisors(next);
+    // A "Saved" left standing over ratings that have since changed would be
+    // claiming something about values nobody has sent.
+    setAdvisorStatus("idle");
+  }
+
   function handlePrint() {
     // Flushes a note they typed and never blurred -- clicking the button does
     // blur the textarea, but not before this handler runs in every browser.
@@ -306,18 +362,13 @@ export function Assessment({
     if (sectionIndex < GAPS.length - 1) {
       setSectionIndex((i) => i + 1);
     } else {
-      setView("advisors");
+      // The last gap submits. Nothing stands between it and the results any
+      // more -- the advisor section is a button ON the results page now.
+      void handleFinish();
     }
   }
 
   function handleBack() {
-    // sectionIndex is still the last gap while the advisor section is up, so
-    // this lands back on the questions they came from.
-    if (view === "advisors") {
-      setError(null);
-      setView("section");
-      return;
-    }
     if (sectionIndex === 0) {
       setView("intro");
     } else {
@@ -331,6 +382,8 @@ export function Assessment({
     setFollowUpInterest(null);
     setFollowUpNote("");
     setAdvisors({});
+    setAdvisorsOpen(false);
+    setAdvisorStatus("idle");
     lastConfirmed.current = null;
     inFlight.current = null;
     setNoteStatus("idle");
@@ -424,7 +477,7 @@ export function Assessment({
             // leaves it mostly empty tint.
             <div
               key={g.gap}
-              className="py-6 sm:py-7 first:pt-0 grid gap-4 md:grid-cols-2 md:gap-8 items-start"
+              className="py-6 sm:py-7 first:pt-0 grid gap-4"
             >
               <div>
               <div className="flex items-baseline justify-between gap-4">
@@ -614,6 +667,18 @@ export function Assessment({
           >
             Start over
           </button>
+          {/* Brandon's advisor section lives here rather than in front of the
+              results. Never disabled and never required: it is intelligence
+              for F&W, not part of what the respondent came for. */}
+          <button
+            type="button"
+            onClick={() => setAdvisorsOpen((open) => !open)}
+            aria-expanded={advisorsOpen}
+            aria-controls="advisorPanel"
+            className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink hover:bg-paper-raised cursor-pointer"
+          >
+            {ADVISOR_BUTTON_LABEL}
+          </button>
           <button
             type="button"
             onClick={handlePrint}
@@ -638,6 +703,51 @@ export function Assessment({
             Answer the question above to print your results.
           </p>
         )}
+
+        {advisorsOpen && (
+          // print:hidden, like the actions above it: what they print is their
+          // assessment. Who their banker is belongs to F&W's copy of the row,
+          // not to the page they hand round a boardroom.
+          <section
+            id="advisorPanel"
+            aria-labelledby="advisorPanelTitle"
+            className="mt-8 rounded-lg border border-line bg-paper-raised px-5 py-6 print:hidden"
+          >
+            <h3
+              id="advisorPanelTitle"
+              className="font-display text-2xl text-ink"
+            >
+              {ADVISOR_SECTION_TITLE}
+            </h3>
+            <p className="text-ink-muted italic mt-1">
+              {ADVISOR_SECTION_TAGLINE}
+            </p>
+
+            <AdvisorSection value={advisors} onChange={handleAdvisorsChange} />
+
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleAdvisorsSave}
+                disabled={advisorStatus === "saving"}
+                className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {advisorStatus === "saving" ? "Saving..." : "Save"}
+              </button>
+              <span
+                aria-live="polite"
+                className={[
+                  "text-sm",
+                  advisorStatus === "failed" ? "text-maroon" : "text-ink-muted",
+                ].join(" ")}
+              >
+                {advisorStatus === "saved" && "Saved — thank you."}
+                {advisorStatus === "failed" &&
+                  "That didn't send. Please try again."}
+              </span>
+            </div>
+          </section>
+        )}
       </div>
     );
   }
@@ -648,47 +758,6 @@ export function Assessment({
   // results. It renders as its own step rather than a sixth section, because
   // it is not part of the assessment -- nothing here is scored, the progress
   // bar does not count it, and "Skip" is as complete an answer as any other.
-  if (view === "advisors") {
-    return (
-      <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
-        <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
-          One more thing
-        </p>
-        <h2 className="font-display text-3xl text-ink mt-2">
-          {ADVISOR_SECTION_TITLE}
-        </h2>
-        <p className="text-ink-muted italic mt-1">{ADVISOR_SECTION_TAGLINE}</p>
-
-        {error && (
-          <div className="mt-6 rounded-md border border-red bg-[var(--color-tint)] px-4 py-3 text-sm text-ink">
-            {error}
-          </div>
-        )}
-
-        <AdvisorSection value={advisors} onChange={setAdvisors} />
-
-        <div className="mt-10 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink hover:bg-paper-raised cursor-pointer"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            // Never disabled. The whole section is optional, so there is no
-            // state in which someone can be stuck here.
-            onClick={handleFinish}
-            className="rounded-md bg-maroon px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-maroon-dark)] cursor-pointer"
-          >
-            See my results
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Previously this fell through to the section render with only the button
   // label changed, so the whole page sat still while the request was in
   // flight -- Ben's note was that it "appears to freeze before jumping to the
