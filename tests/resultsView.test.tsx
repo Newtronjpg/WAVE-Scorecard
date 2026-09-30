@@ -637,3 +637,41 @@ describe("the optional advisor panel", () => {
     expect(panel()!.className).toContain("print:hidden");
   });
 });
+
+// The branding is only worth anything if it survives the real flow: the
+// letterhead has to be on the page someone actually prints, and the watermark
+// has to be on the two screens that are mostly reading rather than answering.
+describe("Faulk & Winkler branding through the flow", () => {
+  it("puts the printed letterhead on the results", async () => {
+    // Head and foot both: the lockup says whose it is, the footer says how to
+    // call them. A printout with neither is an anonymous sheet of scores.
+    await completeAssessment(3);
+    const header = document.querySelector('[data-print-brand="header"]');
+    const footer = document.querySelector('[data-print-brand="footer"]');
+    expect(header).toBeTruthy();
+    expect(footer).toBeTruthy();
+    expect(footer!.textContent).toContain("fw-cpa.com");
+  });
+
+  it("does not put the letterhead on the questions", async () => {
+    // Nobody prints the question screens, and a letterhead on one would be a
+    // second lockup competing with the header that is already up there.
+    render(<Assessment questions={V13} version={13} />);
+    fillIntro();
+    expect(document.querySelector("[data-print-brand]")).toBeNull();
+  });
+
+  it("carries the spark on the intro and the results, not the questions", async () => {
+    // The guide uses it on pages that are read. A question screen is worked
+    // through, and a large pale shape behind a radio group is just noise.
+    render(<Assessment questions={V13} version={13} />);
+    expect(document.querySelectorAll("[data-spark]").length).toBe(1);
+
+    fillIntro();
+    expect(document.querySelectorAll("[data-spark]").length).toBe(0);
+    cleanup();
+
+    await completeAssessment(3);
+    expect(document.querySelectorAll("[data-spark]").length).toBe(1);
+  });
+});

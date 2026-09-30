@@ -1,4 +1,5 @@
 import { GAPS } from "@/lib/questions";
+import { SparkWatermark } from "./SparkWatermark";
 import {
   INDUSTRY_OPTIONS,
   INDUSTRY_OTHER,
@@ -50,7 +51,10 @@ export function IntroView({
   const showEmailError = email.trim().length > 3 && !emailOk;
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">
+    // isolate contains the spark's negative z-index to this element, so it
+    // sits behind the copy without falling behind the page background.
+    <div className="relative isolate mx-auto max-w-2xl px-5 py-10 sm:py-14">
+      <SparkWatermark />
       <h1 className="font-display text-4xl sm:text-5xl text-red leading-[1.1]">
         WAVE Scorecard
       </h1>

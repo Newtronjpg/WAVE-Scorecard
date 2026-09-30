@@ -7,6 +7,8 @@ import { ScoreGauge } from "./ScoreGauge";
 import { IntroView } from "./IntroView";
 import { FollowUpPrompt } from "./FollowUpPrompt";
 import { AdvisorSection } from "./AdvisorSection";
+import { PrintBrandFooter, PrintBrandHeader } from "./PrintBrand";
+import { SparkWatermark } from "./SparkWatermark";
 import {
   ADVISOR_BUTTON_LABEL,
   ADVISOR_SECTION_TAGLINE,
@@ -423,7 +425,11 @@ export function Assessment({
     const canPrint = followUpInterest !== null || !submissionId;
 
     return (
-      <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
+      // relative, so the spark has something to anchor to. It sits behind the
+      // content rather than beside it, which is how the guide uses it.
+      <div className="relative isolate mx-auto max-w-2xl px-5 py-12 sm:py-16">
+        <SparkWatermark />
+        <PrintBrandHeader />
         <p className="text-xs tracking-widest uppercase text-ink-muted font-medium">
           Your results
         </p>
@@ -748,6 +754,8 @@ export function Assessment({
             </div>
           </section>
         )}
+
+        <PrintBrandFooter />
       </div>
     );
   }

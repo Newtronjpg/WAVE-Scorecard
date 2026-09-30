@@ -1,29 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  /* Brand palette: a deep maroon and warm paper, replacing the
-     placeholder green from the old prototype. */
-  --color-maroon: #6d0104;
-  --color-maroon-dark: #4a0103;
-  --color-red: #ae1b1d;
+  /* Faulk & Winkler, from the September 2025 brand guide. The two reds were
+     already the guide's own values; the neutrals were a warm, paper-ish set
+     invented before the guide existed, and are now the guide's cool greys.
+     Every hex here is quoted from it -- nothing is an approximation, and
+     tests/brand.test.tsx fails if one drifts. */
+  --color-maroon: #6D0104; /* Dark Red */
+  --color-red: #AE1B1D; /* Bright Red */
+  /* Not in the guide: a hover state one step down from Dark Red. The guide
+     gives no interaction states, so this is ours and is deliberately the only
+     colour here that is. */
+  --color-maroon-dark: #4A0103;
 
-  --color-paper: #fbf7f5;
-  --color-paper-raised: #ffffff;
-  --color-ink: #241b1a;
-  --color-ink-muted: #6b5c59;
-  --color-line: #e7dbd8;
+  --color-paper: #F4F3F5; /* Off-White */
+  --color-paper-raised: #FFFFFF; /* White */
+  --color-ink: #341515; /* Maroon -- the guide's text colour, not black */
+  --color-ink-muted: #5A6779; /* Grey 3 */
+  --color-line: #C9D3DD; /* Grey 1 */
 
-  /* Two general-purpose light tints derived from the brand palette, used
-     for badge backgrounds, progress-bar tracks, and the text-selection
-     highlight. These used to be named after the Poor/Fair/Good/Excellent
-     tier system when the rating buttons were color-coded by tier; once
-     that became one flat maroon for "selected" (a deliberate call: no
-     color ramp), tier-good and tier-excellent had nothing left referencing
-     them and were removed, and these two were renamed to describe what
-     they actually do now instead of a coloring scheme that no longer
-     exists in the UI. */
-  --color-tint: #eeded9;
-  --color-selection: #d99c92;
+  /* Two general-purpose tints: badge backgrounds, progress-bar tracks, and the
+     text-selection highlight. Previously mixed from the warm palette, which
+     left them pink against the guide's greys; they are now Grey 1 and Grey 2
+     rather than a new colour invented to sit between them. */
+  --color-tint: #C9D3DD; /* Grey 1 */
+  --color-selection: #B5C2CF; /* Grey 2 */
 
   --font-display: var(--font-eb-garamond);
   --font-sans: var(--font-inter);
@@ -78,4 +79,41 @@ body {
   outline: 2px solid var(--color-red);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/* Print.
+ *
+ * The app had no print block at all until branding -- only scattered
+ * print:hidden utilities on individual elements. The results page is printed
+ * and handed round a boardroom, so it is a real output, not a fallback.
+ */
+@media print {
+  /* Browsers drop backgrounds and "unnecessary" colour by default, which turns
+     the lockup and the score gauge into grey mush. The results page is the
+     whole deliverable here, so its colour is information rather than
+     decoration. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* White, not Off-White: paper is already off-white, and asking a printer to
+     lay ink down over the entire sheet to reproduce #F4F3F5 wastes toner on
+     something nobody would notice was missing. */
+  body {
+    background: #ffffff;
+  }
+
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  /* Keep a gap section and its heading on one sheet where the page allows. */
+  section,
+  h2,
+  h3 {
+    break-inside: avoid;
+  }
 }
